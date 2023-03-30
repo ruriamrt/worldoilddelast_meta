@@ -1,0 +1,1005 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+World Oil Demand Elasticity Meta-Analysis: Data Processing and Exploratory Plots
+================================================================================
+
+* File: oildd_elast_metaanalysis_DataPrep_YYYYMMDD.Rmd
+* Last modified: 03/29/2023
+
+<!-- Chunk descriptions 
+Chunk 1: global_options
+Chunk 2: loadLibraries (loads all necessary R libraries)
+Chunk 3: readData (reads spreadsheet with all information collected from literature review on petroleum and petroleum product demand elasticities)
+Chunk 4: region.names.comp (homogeneizes country/region nomenclatures and lists out individual countries includes in each regional aggregate)
+Chunk 5: readprodconsData (reads production and consumption data from EIA)
+Chunk 6: net.exports (classify each country/region as net exporter or importer based on production and consumption data)
+Chunk 7: petprod.prices (reads cross-sectional data on crude wholesale and product retail prices and assigns adequate price values to each elasticity in the database)
+Chunk 8: GDPdata (reads GDP data and assigns adequate GDP values to each elasticity in the database)
+Chunk 9: lengthrun.calc (creates column that normalizes the adjustment period implied by each elasticity by converting it into a number of periods)
+Chunk 10: StErrorCalc.Tests (tests to ascertain whether calculated standard errors appear to be biased relative to those directly reported in the papers)
+Chunk 11: ElastOnly.DB (creates a dataframe that only includes rows for which the BETA column can be interpreted as an elasticity)
+Chunk 12: defineElasLengthVars (classifies each elasticity as either short-run or long-run)
+Chunk 13: ElastbyNetExp (plots to examine differences in elasticities between net exporters and net importers of oil)
+Chunk 14: product_sector (plots to examine differences in elasticities by petroleum product or end-use sector)
+Chunk 15: region (plots to examine differences in elasticities across regions)
+Chunk 16: avgyr (plot showing relationship between elasticity value and average year of analysis period used to produce the estimate)
+Chunk 17: methods (plots to examine differences in elasticities across estimation methods)
+Chunk 18: Pmaxplot (plot showing difference in elasticities with respect to average versus maximum prices)
+Chunk 19: saveElast (save elasticity database for use in metaregression analysis)
+-->
+
+```{r global_options}
+#opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+```{r loadLibraries}
+library(tidyverse)
+library(broom)
+library(readxl)
+library(scales)
+```
+The database contains elasticity estimates (and their associated standard errors) from 99 papers. The majority of the papers come from one of the three main energy economics journals. However, the sample also contains working papers and publications in other economics peer-reviewed journals. Focus on recent papers (published on year 2000 or later)
+- Papers that did not contain standard errors or any information that would allow for manual calculation of standard errors were left out of the database. 
+- When necessary, error propagation formulas were used to estimate the standard errors of the elasticity estimates.
+
+```{r readData, eval=TRUE}
+# Read elasticities database
+oilddelastdb <- read.csv("../Data/oilddelasticity_litreview_20170721.csv", header=TRUE, skip=1)
+
+# Remove blank rows and blank columns
+oilddelastdb <- oilddelastdb[!(oilddelastdb$REFERENCE ==""),]
+oilddelastdb <- oilddelastdb[,colSums(is.na(oilddelastdb))<nrow(oilddelastdb)]
+
+# list the names of variables in the database just read
+names(oilddelastdb)
+summary(oilddelastdb)
+```
+
+```{r region.names.comp, eval=TRUE}
+#Create a new region column in the oildemand elasticity database that matches unclear country names to the alternative nomenclatures to be used throughout the analysis
+
+##Problematic country/region names
+REGION <- c("Euro area","Europe (14)","G-7","G7/OECD","Income Growers","Latin America","Non-Japan Asia","non-OECD","Oil exporters","Other countries","Other Development Economies","Rest of World","Korea","South Korea","Lybia","UAE","OECD 16","Canada_Atlantic Provinces","Canada_British Columbia", "Canada_Ontario","Canada_Prairie Provinces","Canada_Quebec","Canada  ","Germany_household","Java","UK","US", "US_household","US_Midwest","US_Northeast","US_South","US_West","Lisbon","Afghanistan, Algeria, Angola, Azerbaijan, Bahrain, Brunei, China, Djibouti, Egypt, Ghana, Indonesia, Iran, Iraq, Kazakhstan, Kyrgyz Republic, Kuwait, Libya, Malaysia, Nigeria, Oman, Philippines, Qatar, Saudi Arabia, Sudan, Suriname, Syria, Turkmenistan, UAE, Uzbekistan, Venezuela, Vietnam, Yemen","OECD and non-OECD")
+
+##Alternative nomenclatures to be used
+REGION_ANALYSIS2 <- c("EuroArea","Europe14","G7","G7OECD","IncomeGrower","LatinAmerica","NonJapAsia","NonOECD","OilExporter","OtherCountry","OtherDevelop","RestofWorld","Korea, South","Korea, South","Libya","United Arab Emirates","OECD16","Canada","Canada","Canada","Canada","Canada","Canada","Germany","Indonesia","United Kingdom","United States","United States","United States","United States","United States","United States","Portugal","FuelSubsidies","World")
+
+region.match <- data.frame(REGION, REGION_ANALYSIS2)
+oilddelastdb <- oilddelastdb %>%
+  left_join(region.match, by = c("REGION"))
+
+#For any regions not listed in the REGION list, variable REGION_ANALYSIS will be the same as variable REGION
+#For the regions listed in the REGION list, variable REGION_ANALYSIS must be equal to REGION_ANALYSIS 2
+oilddelastdb <- oilddelastdb %>%
+  mutate(REGION_ANALYSIS = ifelse(is.na(REGION_ANALYSIS2),as.character(REGION),as.character(REGION_ANALYSIS2))) %>%
+  select(-REGION_ANALYSIS2) ##this variable is no longer needed
+
+#Establish country membership for country groupings used in the studies included in the oil demand elasticity database to then assign values of economic variables to these groupings based on the average prices of all their members
+Country.Groups <-list(
+  Europe14 = c("Austria", "Belgium", "Switzerland", "Germany", "Denmark", "Spain", "Finland", "France", "Ireland", "Italy", "Netherlands", "Norway", "Sweden", "United Kingdom"), 
+  FSU = c("Russia", "Azerbaijan", "Kazakhstan", "Turkmenistan", "Uzbekistan", "Armenia", "Belarus", "Estonia", "Georgia", "Kyrgyzstan", "Latvia", "Lithuania", "Moldova", "Tajikistan", "Ukraine"),
+  G7 = c("United States", "Canada", "Japan", "France", "Germany","United Kingdom", "Italy"),
+  G7OECD = c("United States", "Canada", "Japan", "France", "Germany","United Kingdom", "Italy"),
+  IncomeGrower = c("Chile", "Taiwan", "Cyprus", "Dominican Republic", "Egypt", "Hong Kong", "India", "Malaysia", "Malta", "Burma (Myanmar)", "Pakistan", "Singapore", "Sri Lanka", "Thailand", "Tunisia", "Vietnam", "Yemen"),
+  OECD14 = c("Australia", "Canada", "Denmark", "Finland", "Greece", "Ireland", "Japan", "Netherlands", "Norway", "New Zealand", "Sweden", "Switzerland", "United Kingdom", "United States"),
+  OECD16 = c("Austria", "Belgium", "Canada", "Denmark", "Finland", "France", "Greece", "Ireland", "Italy", "Japan", "Netherlands", "Norway", "Spain", "Sweden", "United Kingdom", "United States"),
+  OECD23 = c("Austria", "Belgium", "Canada", "Denmark", "Finland", "France", "Greece", "Ireland", "Italy", "Japan", "Netherlands", "Norway", "Spain", "Sweden", "United Kingdom", "United States", "Australia", "Germany", "Luxembourg", "New Zealand", "Portugal", "Turkey", "Switzerland"),
+  OECD30= c("Australia", "Austria", "Belgium", "Canada", "Czech Republic", "Denmark", "Finland", "France", "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy", "Japan", "Korea", "Luxembourg", "Mexico", "Netherlands", "New Zealand", "Norway", "Poland","Portugal", "Slovakia", "Spain", "Sweden","Switzerland", "Turkey","United Kingdom", "United States"),
+  OECD = c("Australia", "Austria", "Belgium", "Canada", "Czech Republic", "Denmark", "Finland", "France", "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy", "Japan", "Korea", "Luxembourg", "Mexico", "Netherlands", "New Zealand", "Norway", "Poland","Portugal", "Slovakia", "Spain", "Sweden","Switzerland", "Turkey","United Kingdom", "United States"),
+  OilExporter = c("Algeria", "Angola", "Ecuador", "Indonesia", "Iran", "Iraq", "Kuwait", "Libya", "Nigeria", "Saudi Arabia", "United Arab Emirates", "Venezuela", "Bahrain", "Brunei", "Ecuador", "Gabon", "Oman", "Qatar"),
+  OtherCountry = c("Albania", "Angola", "Argentina", "Bangladesh", "Benin", "Bolivia", "Brazil", "Bulgaria", "Cameroon", "Colombia", "Congo (Brazzaville)", "Congo (Kinshasa)", "Costa Rica", "Cote dIvoire (IvoryCoast)", "Cuba", "", "El Salvador","Ethiopia", "Former Yugoslavia", "Ghana", "Gibraltar", "Guatemala", "Haiti", "Honduras", "Israel", "Jamaica", "Jordan", "Kenya", "Korea, South", "Lebanon", "Morocco", "Mozambique", "Namibia", "Nepal", "Nicaragua", "Panama", "Paraguay", "Peru", "Philippines", "Romania", "Senegal", "South Africa", "Sudan and South Sudan", "Syria", "Togo", "Trinidad and Tobago", "Tanzania", "Uruguay", "Zambia", "Zimbabwe"), #(Dargay et al. grouping. It includes 49 countries listed in Appendix B of Dargay et al.(2007))
+  EuroArea = c("Austria", "Belgium", "Cyprus", "Estonia", "Finland", "France", "Germany", "Greece", "Ireland", "Italy", "Luxembourg", "Malta", "Netherlands", "Portugal", "Slovakia", "Slovenia", "Spain"), #(Dees et al. grouping)
+  NonJapAsia = c("Afghanistan", "Bahrain",	"Bangladesh",	"Bhutan",	"Brunei", "Burma (Myanmar)",	"Cambodia",	"China",	"Timor-Leste (East Timor)",	"India",	"Indonesia",	"Iran",	"Iraq",	"Jordan",	"Kuwait",	"Kyrgyzstan",	"Laos",	"Lebanon",	"Malaysia",	"Maldives",	"Mongolia",	"Nepal",	"Korea, North",	"Oman",	"Pakistan",	"Palestine Territories",	"Philippines",	"Qatar",	"Saudi Arabia",	"Singapore",	"Sri Lanka",	"Syria",	"Taiwan",	"Thailand",	"United Arab Emirates",	"Vietnam",	"Yemen",	"Hong Kong"), #(Dees et al. grouping)
+  LatinAmerica = c("Argentina",  "Bolivia",	"Brazil",	"Colombia",	"Costa Rica",	"Cuba",	"Dominican Republic",	"Ecuador",	"El Salvador",	"Guatemala",	"Haiti",	"Honduras",	"Nicaragua",	"Panama",	"Paraguay",	"Peru",	"Uruguay",	"Venezuela"), #(Dees et al. grouping)
+  Transition = c("Armenia", "Azerbaijan",	"Belarus", "Georgia",	"Kazakhstan",	"Kyrgyzstan",	"Latvia",	"Lithuania",	"Moldova",	"Russia",	"Tajikistan",	"Turkmenistan",	"Ukraine",	"Uzbekistan",	"Bosnia and Herzegovina",	"Montenegro",	"Serbia",	"Macedonia",	"Albania",	"Bulgaria",	"Croatia",	"Romania"), #(Dees et al. grouping)
+  OtherDevelop = c("Australia", "New Zealand", "Israel", "Korea, South", "Canada", "Chile", "Mexico", "Czech Republic", "Denmark", "Hungary", "Iceland", "Norway", "Poland", "Sweden", "Switzerland", "Turkey", "Guam", "Puerto Rico"), #(Dees et al. grouping)
+  RestofWorld = c("American Samoa", "Cook Islands", "Fiji", "French Polynesia", "Kiribati", "Macau",	"Nauru", "New Caledonia",	"Niue",	"Papua New Guinea",	"Samoa", "Solomon Islands",	"Timor-Leste (East Timor)",	"Tonga",	"U.S. Pacific Islands",	"Vanuatu",	"Wake Island",	"Algeria", "Angola", "Benin",	"Botswana",	"Burkina Faso",	"Burundi", "Cameroon", "Cape Verde",	"Central African Republic",	"Chad",	"Comoros", "Congo (Brazzaville)", "Congo (Kinshasa)",	"Cote dIvoire (IvoryCoast)",	"Djibouti",	"Egypt",	"Equatorial Guinea", "Guinea",	"Eritrea", "Ethiopia", "Gabon", "Gambia, The", "Ghana", "Guinea", "Guinea-Bissau",	"Kenya", "Lesotho",	"Liberia", "Libya",	"Madagascar",	"Malawi",	"Mali",	"Mauritania",	"Mauritius",	"Morocco",	"Mozambique",	"Namibia", "Niger",	"Nigeria", "Reunion",	"Rwanda",	"Saint Helena",	"Sao Tome and Principe", "Senegal",	"Seychelles",	"Sierra Leone", "Somalia", "South Africa", "Sudan and South Sudan",	"Swaziland", "Tanzania", "Togo", "Tunisia",	"Uganda",	"Western Sahara",	"Zambia",	"Zimbabwe",	"Faroe Islands", "Gibraltar",	"Bermuda", "Greenland",	"Saint Pierre and Miquelon"), #(Dees et al. grouping)
+  FuelSubsidies = c("Afghanistan", "Algeria", "Angola", "Azerbaijan", "Bahrain", "Brunei", "China", "Djibouti", "Egypt", "Ghana", "Indonesia", "Iran", "Iraq", "Kazakhstan", "Kyrgyzstan", "Kuwait", "Libya", "Malaysia", "Nigeria", "Oman", "Philippines", "Qatar", "Saudi Arabia", "Sudan", "Suriname", "Syria", "Turkmenistan", "United Arab Emirates", "Uzbekistan", "Venezuela", "Vietnam", "Yemen"),
+  World = c("World"),
+  NonOECD = c("Afghanistan", "Africa", "Albania", "Algeria", "American Samoa", "Angola", "Antarctica", "Antigua and Barbuda", "Argentina", "Armenia", "Aruba", "Asia & Oceania", "Azerbaijan", "Bahamas, The", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belize", "Benin", "Bermuda", "Bhutan", "Bolivia", "Bosnia and Herzegovina",  "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burma (Myanmar)", "Burundi", "Cambodia", "Cameroon", "Cape Verde", "Cayman Islands", "Central & South America", "Central African Republic", "Chad", "Chile", "China", "Colombia",  "Comoros", "Congo (Brazzaville)", "Congo (Kinshasa)", "Cook Islands", "Costa Rica", "Cote dIvoire (IvoryCoast)", "Croatia", "Cuba", "Cyprus", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Ethiopia", "Eurasia", "Europe", "Falkland Islands (Islas Malvinas)", "Faroe Islands", "Fiji", "Former Czechoslovakia", "Former Serbia and Montenegro", "Former U.S.S.R.", "Former Yugoslavia", "French Guiana", "French Polynesia", "Gabon", "Gambia, The", "Georgia", "Ghana", "Gibraltar",  "Greenland", "Grenada", "Guadeloupe", "Guam", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Hawaiian Trade Zone", "Honduras", "Hong Kong", "India", "Indonesia", "Iran", "Iraq","Israel", "Jamaica", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Korea, North", "Kosovo", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Lithuania", "Macau", "Macedonia", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Martinique", "Mauritania", "Mauritius", "Middle East", "Moldova", "Mongolia", "Montenegro", "Montserrat", "Morocco", "Mozambique", "Namibia", "Nauru", "Nepal", "Netherlands Antilles", "New Caledonia", "Nicaragua", "Niger", "Nigeria", "Niue", "North America", "Oman", "Pakistan", "Palestinian Territories", "Panama",  "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Puerto Rico", "Qatar", "Reunion", "Romania", "Russia", "Rwanda", "Saint Helena", "Saint Kitts and Nevis", "Saint Lucia", "Saint Pierre and Miquelon", "Saint Vincent/Grenadines", "Samoa", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "Sri Lanka", "Sudan and South Sudan", "Suriname", "Swaziland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste (East Timor)", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkmenistan", "Turks and Caicos Islands", "U.S. Pacific Islands", "Uganda", "Ukraine", "United Arab Emirates", "Uruguay", "Uzbekistan", "Vanuatu", "Venezuela", "Vietnam", "Virgin Islands,  U.S.", "Virgin Islands, British", "Wake Island", "Western Sahara", "World", "Yemen", "Zambia", "Zimbabwe")) 
+```
+
+```{r readprodconsData, eval=TRUE}
+# Read production and consumption data from EIA International Statistics
+
+#PRODUCTION DATA
+petprod.panel <- read_excel("../Data/auxiliary_inputs_20170829.xlsx", sheet = "petprod.panel", col_names = TRUE, skip = 2) %>%
+  filter(!is.na(`...1`)) %>%
+  select(-`...2`) %>%
+  rename(Country_raw = `...1`) %>%
+  mutate(across(-Country_raw, ~ as.numeric(.x)))
+
+petprod.panel[is.na(petprod.panel)] <-0
+
+#Note: The production and consumption spreadsheets differ by three rows. The production database contains separate offshore production numbers for Germany, Netherlands, and United Kingdom. Since that distinction is not important for determining whether each of those countries is a net importer or a net exporter, add the onshore and offshore numbers for those three countries before merging the databases (and then merge only those countries that can be found in both the production and consumption databases)
+
+petprod.panel <- petprod.panel %>%
+  mutate(Country = ifelse(Country_raw %in% c("Germany", "Germany (Offshore)", "Germany, East", "Germany, West"), "Germany",
+                          ifelse(Country_raw %in% c("Netherlands", "Netherlands (Offshore)"), "Netherlands",
+                                 ifelse(Country_raw %in% c("United Kingdom", "United Kingdom (Offshore)"), "United Kingdom", Country_raw)))) %>%
+  pivot_longer(cols = c(-Country, -Country_raw), names_to = "YEAR", values_to = "production") %>%
+  group_by(Country, YEAR) %>%
+  summarise(production = sum(production))
+
+
+#CONSUMPTION DATA
+petcons.panel <- read_excel("../Data/auxiliary_inputs_20170829.xlsx", sheet = "petcons.panel", col_names = TRUE, skip = 2) %>%
+  filter(!is.na(`...1`)) %>%
+  select(-`...2`) %>%
+  rename(Country_raw = `...1`) %>%
+  mutate(across(-Country_raw, ~ as.numeric(.x)))
+
+petcons.panel[is.na(petcons.panel)] <-0
+
+petcons.panel <- petcons.panel %>%
+  mutate(Country = ifelse(Country_raw %in% c("Germany", "Germany, East", "Germany, West"), "Germany", Country_raw)) %>%
+  pivot_longer(cols = c(-Country, -Country_raw), names_to = "YEAR", values_to = "consumption") %>%
+  group_by(Country, YEAR) %>%
+  summarise(consumption = sum(consumption))
+
+#CALCULATE NET EXPORTS
+petconsprod <- petprod.panel %>%
+  left_join(petcons.panel, by = c("Country", "YEAR")) %>%
+  filter(YEAR < 2014) %>%
+  mutate(netexp = production - consumption) %>%
+  mutate(YEAR = as.numeric(YEAR)) %>%
+  as.data.frame()
+  
+
+df.netexp.groups <- lapply(Country.Groups, function(x){data.frame(Country= character(34), YEAR= numeric(34), production = numeric(34), consumption = numeric(34), netexp = numeric(34))})
+
+#Assign production and consumption data to country groupings
+for(i in seq_along(df.netexp.groups)){
+  for(j in 1:nrow(df.netexp.groups[[i]])){
+      df.netexp.groups[[i]]$Country <- names(df.netexp.groups)[i]
+      df.netexp.groups[[i]]$YEAR <- seq(1980, 2013, by=1)
+      df.netexp.groups[[i]]$production[j]<-sum(petconsprod$production[petconsprod$YEAR == 1979+j & petconsprod$Country %in% Country.Groups[[i]]])
+      df.netexp.groups[[i]]$consumption[j]<-sum(petconsprod$consumption[petconsprod$YEAR == 1979+j & petconsprod$Country %in% Country.Groups[[i]]])
+      df.netexp.groups[[i]]$netexp[j]<-(df.netexp.groups[[i]]$production[j] - df.netexp.groups[[i]]$consumption[j])
+  }
+}
+
+df.netexp.groups.all <- do.call(("rbind"), df.netexp.groups)
+
+petconsprod.all <- rbind(petconsprod, df.netexp.groups.all)
+```
+
+Notes from IEA Energy Statistics
+Petroleum / Production
+--Total Oil Supply includes the production of crude oil (including lease condensate), natural gas plant liquids, and other liquids, and refinery processing gain.
+--Other Liquids includes biodiesel, ethanol, liquids produced from coal, gas, and oil shale, Orimulsion, and other hydrocarbons.
+--Crude Oil data for Canada include oil processed from Alberta oil sands.
+--Negative refinery processing gain data values indicate a net refinery processing loss.
+--The Liquefied Petroleum Gases category includes, where data are available, pentanes plus.
+--The Other Products category includes asphalt, coke, aviation gasoline, lubricants, naphthas, paraffin wax, petrochemical feedstocks, unfinished oils, white spirits, and blending components.
+Petroleum / Consumption
+--Total Petroleum Consumption includes internal consumption, refinery fuel and loss, and bunkering. Also included, where available, is direct combustion of crude oil.
+--The Liquefied Petroleum Gases category also includes, where data are available, liquefied petroleum gases sold directly from natural gas processing plants for fuel or chemical uses and pentanes plus.
+--The Other Products category includes asphalt, coke, aviation gasoline, lubricants, naphthas, paraffin wax, petrochemical feedstocks, unfinished oils, white spirits, and blending components.
+--Total Petroleum Consumption includes internal consumption, refinery fuel and loss, and bunkering. Also included, where available, is direct combustion of crude oil.
+
+```{r net.exports, eval=TRUE}
+#Create a new column in the oil elasticities database that displays the appropriate information on net exports and consumption for each paper
+
+# For each observation, assign the average net exports over the analysis period
+#Notes: 1/There are 15 observations coming from papers whose period of analysis ends before 1980 (the first year for which we have production and consumption data); net exports for those observations will be evaluated for 1980. 2/Information is not available for all countries starting in 1980; the average should be computed using only the years for which information is available in each case.
+
+
+for(i in 1:nrow(oilddelastdb))
+  {if(oilddelastdb$YEAR_END[i] < 1980) 
+     oilddelastdb$avg_NETEXP[i] <- petconsprod.all$netexp[petconsprod.all$Country == oilddelastdb$REGION_ANALYSIS[i] & petconsprod.all$YEAR == "1980"]
+  else 
+    oilddelastdb$avg_NETEXP[i] <- mean(petconsprod.all$netexp[petconsprod.all$Country == oilddelastdb$REGION_ANALYSIS[i] & petconsprod.all$YEAR >= oilddelastdb$YEAR_START[i] & petconsprod.all$YEAR <=  oilddelastdb$YEAR_END[i]& !(is.na(petconsprod.all$netexp))])}
+
+for(i in 1:nrow(oilddelastdb))
+  {if(oilddelastdb$YEAR_END[i] < 1980) 
+     oilddelastdb$cons[i] <- petconsprod.all$consumption[petconsprod.all$Country == oilddelastdb$REGION_ANALYSIS[i] & petconsprod.all$YEAR == "1980"]
+  else 
+    oilddelastdb$cons[i] <- mean(petconsprod.all$consumption[petconsprod.all$Country == oilddelastdb$REGION_ANALYSIS[i] & petconsprod.all$YEAR >= oilddelastdb$YEAR_START[i] & petconsprod.all$YEAR <=  oilddelastdb$YEAR_END[i]& !(is.na(petconsprod.all$netexp))])}
+
+#Transform average net exports and consumption variable from thousand barrels per day to million barrels per day
+oilddelastdb <- oilddelastdb %>%
+  mutate(avg_NETEXP  = avg_NETEXP/1000,
+         cons = cons/1000)
+
+summary(oilddelastdb$avg_NETEXP)
+summary(oilddelastdb$cons)
+```
+
+```{r petprod.prices, eval=TRUE}
+#Read data on crude oil price and cross-sections of petroleum product prices (retail price levels inclusive of taxes or subsidies)
+
+##Source 1: Gupta, S. and W.Mahler (1995). "Taxation of Petroleum Products" Energy Economics 17(2):101-116
+retailp.gm <- read_excel("../Data/auxiliary_inputs_20170829.xlsx", sheet = "retailp.gm", col_names = TRUE) %>%
+  mutate(across(-Country, ~ as.numeric(as.character(.x))))
+
+##Source 2: http://www.worldbank.org/transport/transportresults/global/fuelprices-final2007.pdf
+retailp.gtz <- read_excel("../Data/auxiliary_inputs_20170829.xlsx", sheet = "retailp.gtz", col_names = TRUE) %>%
+  mutate(across(-Country, ~ as.numeric(as.character(.x))))
+
+##From Gupta & Mahler, select most recent year (1991) numbers only
+retailp.1991 <- retailp.gm %>%
+  select(Country, contains("1991"))
+  
+
+##In GTZ prices, transform from cents per liter to $/liter
+retailp.gtz <- retailp.gtz %>%
+  mutate(Diesel.1998 = Diesel.1998/100,
+         Gasoline.1998 = Super.Gasoline.1998/100,
+         Diesel.1995 = Diesel.1995/100,
+         Gasoline.1995 = Super.Gasoline.1995/100)
+
+retailp.1998 <- retailp.gtz %>%
+  select(Country, contains("1998"))
+
+retailp.1995 <- retailp.gtz %>%
+  select(Country, contains("1995"))
+
+#Crude oil prices
+literspergal <- 3.78
+galsperbbl <- 42
+
+##Alternative A:Brent price source: http://www.eia.gov/dnav/pet/pet_pri_spt_s1_a.htm [transformed from dollars/barrel to dollars/liter]
+Brentp.1991 = 20.04/(literspergal * galsperbbl)  
+Brentp.1995 = 17.02/(literspergal * galsperbbl)  
+Brentp.1998 = 12.76/(literspergal * galsperbbl)  
+##Alternative B: Average landed cost of imported crude. Source:http://www.eia.gov/dnav/pet/pet_pri_land1_k_a.htm [transformed from dollars/barrel to dollars/liter]
+Landedp.1991 = 18.02/(literspergal * galsperbbl) 
+Landedp.1995 = 16.78/(literspergal * galsperbbl) 
+Landedp.1998 = 11.84/(literspergal * galsperbbl) 
+##Alternative C: Refiner acquisition cost of imported crude oil. Source: http://www.eia.gov/dnav/pet/pet_pri_rac2_dcu_nus_a.htm [transformed from dollars/barrel to dollars/liter]
+Refacqp.1991 = 18.70/(literspergal * galsperbbl)
+Refacqp.1995 = 17.14/(literspergal * galsperbbl)
+Refacqp.1998 = 12.04/(literspergal * galsperbbl)
+
+#**************
+
+#Create new columns in the oil elasticities database that contain 1991 product prices inclusive of taxes as collected from Gupta&Mahler(1991).
+
+##Add rows in the price database corresponding to country groupings
+Country.Groups.2 <- c("Europe14", "FSU", "G7", "G7OECD", "IncomeGrower", "OECD14", "OECD16", "OECD23", "OECD30", "OECD", "OilExporter", "OtherCountry","EuroArea", "NonJapAsia", "LatinAmerica","Transition", "OtherDevelop", "RestofWorld", "FuelSubsidies", "World", "NonOECD")
+
+retailp.1991.groups <- data.frame(Country.Groups.2)
+
+for(i in 1:nrow(retailp.1991.groups)){
+retailp.1991.groups$Premium.gas.1991[i] <- 
+  sum(retailp.1991$Premium.gas.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Premium.gas.1991)])/
+  length(retailp.1991$Premium.gas.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Premium.gas.1991)])
+
+retailp.1991.groups$Reg.gas.1991[i] <- 
+  sum(retailp.1991$Reg.gas.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Reg.gas.1991)])/
+  length(retailp.1991$Reg.gas.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Reg.gas.1991)])
+
+retailp.1991.groups$Kerosene.1991[i] <- 
+  sum(retailp.1991$Kerosene.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Kerosene.1991)])/
+  length(retailp.1991$Kerosene.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Kerosene.1991)])
+
+retailp.1991.groups$Diesel.1991[i] <- 
+  sum(retailp.1991$Diesel.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Diesel.1991)])/
+  length(retailp.1991$Diesel.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Diesel.1991)])
+
+retailp.1991.groups$Fuel.oil.1991[i] <- 
+  sum(retailp.1991$Fuel.oil.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Fuel.oil.1991)])/
+  length(retailp.1991$Fuel.oil.1991[retailp.1991$Country %in% Country.Groups[[i]]& !is.na(retailp.1991$Fuel.oil.1991)])
+} 
+
+retailp.1991.groups <- retailp.1991.groups %>%
+  rename(Country = Country.Groups.2)
+
+retailp.1991.all <- rbind(retailp.1991, retailp.1991.groups)
+
+oilddelastdb <- oilddelastdb %>%
+  left_join(retailp.1991.all, by = c("REGION_ANALYSIS" = "Country"))
+
+#Select a single price depending on product/sector to which each elasticity observation refers.
+oilddelastdb$PRODUCT_SECTOR_2 <- as.factor(paste(oilddelastdb$PRODUCT_SECTOR, oilddelastdb$PRICE_POINT, sep = "_"))
+
+diesel.prodsect <- c("Diesel_1", "Diesel_transportation_1", "Diesel_industrial_1", "Diesel_electricity_generation_1")
+fueloil.prodsect <- c("Fuel_oil_nontransportation_1", "Fuel_oil_transportation_1", "Gas_oil_industrial_1", "Oil_electric_generation_1", "Oil_industrial_1", "Other_oil_1", "Residual_fuel_oil_1", "Heavy_fuel_industrial_1", "Oil_nontransportation_1")
+kerosene.prodsect <- c("Gas_oil_residential_1","Kerosene_1","Jet_fuel_1", "Oil_commercial_1", "Oil_residential_1", "LPG_1", "Kerosene_residential_1", "LPG_residential_1")
+gasoline.prodsect <- c("Gasoline_1", "Gasoline_transportation_1", "Gasoline_residential_1")
+transport.prodsect <- c("Oil_transportation_1", "Transportation_gasoline_diesel_1")
+totaloil.prodsect <- c("Total_oil_1", "Total_petroleum_products_1")
+
+#Construct extra columns for prices that will be computed as averages of various product prices
+oilddelastdb$Gasoline.1991 <- rowMeans(oilddelastdb[,c("Premium.gas.1991", "Reg.gas.1991")], na.rm = TRUE)
+oilddelastdb$Ptransp.1991 <- rowMeans(oilddelastdb[,c("Premium.gas.1991", "Reg.gas.1991", "Diesel.1991")], na.rm = TRUE)
+oilddelastdb$Pall.1991 <- rowMeans(oilddelastdb[,c("Premium.gas.1991", "Reg.gas.1991", "Diesel.1991", "Kerosene.1991", "Fuel.oil.1991")], na.rm = TRUE)
+
+oilddelastdb <- oilddelastdb %>%
+  mutate(PRICE.1991 = ifelse(PRICE_POINT == "0", Brentp.1991, 
+                            ifelse(PRODUCT_SECTOR_2 %in% diesel.prodsect, oilddelastdb$Diesel.1991,
+                              ifelse(PRODUCT_SECTOR_2 %in% fueloil.prodsect, oilddelastdb$Fuel.oil.1991,
+                                ifelse(PRODUCT_SECTOR_2 %in% kerosene.prodsect, oilddelastdb$Kerosene.1991,
+                                  ifelse(PRODUCT_SECTOR_2 %in% gasoline.prodsect, oilddelastdb$Gasoline.1991,
+                                    ifelse(PRODUCT_SECTOR_2 %in% transport.prodsect, oilddelastdb$Ptransp.1991,
+                                      ifelse(PRODUCT_SECTOR_2 %in% totaloil.prodsect, oilddelastdb$Pall.1991, NA))))))))
+#**************
+
+#Create new columns in the oil elasticities database that contain 1995 product prices inclusive of taxes as collected from GTZ survey
+
+retailp.1995.groups <- data.frame(Country.Groups.2)
+for(i in 1:nrow(retailp.1995.groups)){
+retailp.1995.groups$Gasoline.1995[i] <- 
+  sum(retailp.1995$Gasoline.1995[retailp.1995$Country %in% Country.Groups[[i]]& !is.na(retailp.1995$Gasoline.1995)])/
+  length(retailp.1995$Gasoline.1995[retailp.1995$Country %in% Country.Groups[[i]]& !is.na(retailp.1995$Gasoline.1995)])
+
+retailp.1995.groups$Diesel.1995[i] <- 
+  sum(retailp.1995$Diesel.1995[retailp.1995$Country %in% Country.Groups[[i]]& !is.na(retailp.1995$Diesel.1995)])/
+  length(retailp.1995$Diesel.1995[retailp.1995$Country %in% Country.Groups[[i]]& !is.na(retailp.1995$Diesel.1995)])
+} 
+
+retailp.1995.groups <- retailp.1995.groups %>%
+  rename(Country = Country.Groups.2)
+
+retailp.1995.all <- rbind(retailp.1995[,c("Country", "Gasoline.1995", "Diesel.1995")], retailp.1995.groups)
+
+#Merge price data with elasticity database
+oilddelastdb <- oilddelastdb %>% 
+  left_join(retailp.1995.all, by = c("REGION_ANALYSIS" = "Country"))
+
+#Construct extra columns for prices that will be computed as averages of various product prices
+oilddelastdb$Ptransp.1995 <- rowMeans(oilddelastdb[,c("Gasoline.1995", "Diesel.1995")], na.rm = TRUE)
+
+oilddelastdb <- oilddelastdb %>%
+  mutate(PRICE.1995 = ifelse(PRICE_POINT == "0", Brentp.1995, 
+                        ifelse(PRODUCT_SECTOR_2 %in% diesel.prodsect, oilddelastdb$Diesel.1995,
+                          ifelse(PRODUCT_SECTOR_2 %in% gasoline.prodsect, oilddelastdb$Gasoline.1995,
+                            ifelse(PRODUCT_SECTOR_2 %in% transport.prodsect, oilddelastdb$Ptransp.1995, NA)))))
+#**************
+
+#Create new columns in the oil elasticities database that contain 1998 product prices inclusive of taxes as collected from GTZ survey
+##Note: These will be the columns ultimately used in the metaregression analysis because 1998 data from GTZ survey balances out best two key considerations: 1)distance to the average year of data analyzed by the papers in our database, 2)country coverage (we want to lose as few observations as possible as a result of including this cross-sectional variable in the metaregression)
+
+retailp.1998.groups <- data.frame(Country.Groups.2)
+for(i in 1:nrow(retailp.1998.groups)){
+retailp.1998.groups$Gasoline.1998[i] <- 
+  sum(retailp.1998$Gasoline.1998[retailp.1998$Country %in% Country.Groups[[i]]& !is.na(retailp.1998$Gasoline.1998)])/
+  length(retailp.1998$Gasoline.1998[retailp.1998$Country %in% Country.Groups[[i]]& !is.na(retailp.1998$Gasoline.1998)])
+
+retailp.1998.groups$Diesel.1998[i] <- 
+  sum(retailp.1998$Diesel.1998[retailp.1998$Country %in% Country.Groups[[i]]& !is.na(retailp.1998$Diesel.1998)])/
+  length(retailp.1998$Diesel.1998[retailp.1998$Country %in% Country.Groups[[i]]& !is.na(retailp.1998$Diesel.1998)])
+} 
+
+retailp.1998.groups <- retailp.1998.groups %>%
+  rename(Country = Country.Groups.2)
+
+retailp.1998.all <- rbind(retailp.1998[,c("Country", "Gasoline.1998", "Diesel.1998")], retailp.1998.groups)
+
+#Merge price data with elasticity database
+oilddelastdb <- oilddelastdb %>%
+  left_join(retailp.1998.all, by = c("REGION_ANALYSIS" = "Country"))
+
+#Construct extra columns for prices that will be computed as averages of various product prices
+oilddelastdb$Ptransp.1998 <- rowMeans(oilddelastdb[,c("Gasoline.1998", "Diesel.1998")], na.rm = TRUE)
+
+oilddelastdb$PRICE.1998 <- ifelse(oilddelastdb$PRICE_POINT == "0", Brentp.1998, 
+                             ifelse(oilddelastdb$PRODUCT_SECTOR_2 %in% diesel.prodsect, oilddelastdb$Diesel.1998,
+                               ifelse(oilddelastdb$PRODUCT_SECTOR_2 %in% gasoline.prodsect, oilddelastdb$Gasoline.1998,
+                                 ifelse(oilddelastdb$PRODUCT_SECTOR_2 %in% transport.prodsect, oilddelastdb$Ptransp.1998, NA))))
+
+#Plot
+product.price.plot.1998 <- ggplot(retailp.1998, aes(x=Gasoline.1998)) + 
+  geom_histogram(binwidth = 0.10, fill = "blue", color = "black") +
+  geom_vline(xintercept = Brentp.1998, linewidth = 1.5)+
+  geom_vline(xintercept = retailp.1998.all$Diesel.1998[retailp.1998.all$Country == "NonOECD"], linewidth = 1.5, color = "orange")+
+  geom_vline(xintercept = retailp.1998.all$Diesel.1998[retailp.1998.all$Country == "OECD"], linewidth = 1.5, color = "green")+
+  labs(x="$/liter", y = "count", title="Gasoline Prices 1998") +  
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=16, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=65, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_blank(), legend.title=element_blank(), legend.key=element_blank(), legend.position="none") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+product.price.plot.1998 
+
+```
+
+Based on the number of countries for which data is available, the 1998 price cross section will be the one used in the metaregressions.
+
+```{r GDPdata, eval=TRUE}
+#Read GDP per capita data
+GDP_pwt <- read_excel("../Data/auxiliary_inputs_20170829.xlsx", sheet = "GDP_pwt", skip=7, col_names = TRUE) %>%
+  ##Recode country names that differ from those used in the elasticity database
+  mutate(country = ifelse(country == "Republic of Korea", "Korea, South",
+                          ifelse(country == "Iran (Islamic Republic of)", "Iran",
+                                 ifelse(country == "Venezuela (Bolivarian Republic of)", "Venezuela", country)))) %>%
+  #Subset data for year of interest (same as selected for the crude oil/petroleum product prices in previous chunk)
+  filter(year == "1998") %>%
+  mutate(rgdpe_cap.1998 = (1/1000)*(rgdpe/pop)) %>%
+  select(country, rgdpe_cap.1998)
+
+
+#Create new columns in the oil elasticities database that contain GDP per capita in 1998
+##Add rows in the price database corresponding to country groupings
+GDP.1998.groups <- data.frame(Country.Groups.2)
+
+for(i in 1:nrow(GDP.1998.groups)){
+GDP.1998.groups$rgdpe_cap.1998[i] <- 
+  sum(GDP_pwt$rgdpe_cap.1998[GDP_pwt$country %in% Country.Groups[[i]]])/
+  length(GDP_pwt$rgdpe_cap.1998[GDP_pwt$country %in% Country.Groups[[i]]])
+} 
+
+GDP.1998.groups <- GDP.1998.groups %>%
+  rename(country = Country.Groups.2)
+
+GDP.1998.all <- rbind(GDP_pwt, GDP.1998.groups)
+
+#Merge price data with elasticity database
+oilddelastdb <- oilddelastdb %>%
+  left_join(GDP.1998.all, by = c("REGION_ANALYSIS" = "country"))
+####END of variable creation based on external data sources (i.e., based on information not contained in the papers used for the meta-analysis)
+```
+
+
+Transform and augment variables
+---------------------------------
+
+Normalize the length of run for long-run elasticity estimates obtained from partial adjustment models, error correction models, and other ARDL models
+Partial adjustment model: yt = a + d*yt-1 + f*xt et
+Error correction model: yt - yt-1 = a + (b-1)(yt-1 - c*xt-1) + d(xt - xt-1) + ut
+From Davidson and McKinnon(2003), page 683: " The parameter b-1 from the error correction model can be interpreted as the proportion of the disequilibrium that is reflected in the movement of yt in one period. In this respect, b-1 is essentially the same as the parameter d-1 of the partial adjustment model"
+
+```{r lengthrun.calc, eval=TRUE}
+# Create new columns to report speed of adjustment coefficients (for the purpose of normalizing the length of run for long-run elasticities)
+
+#Assign (when available) the coefficient on lagged demand to all the rows (in a new column) corresponding to that equation
+lagged.varsymbols <- c("Dt-1","Dt-1_P","Dt-1_Y","Kt-1")
+
+oilddelastdb2 <- oilddelastdb %>%
+  group_by(STUDY_NUMBER, EQNUM) %>%
+  mutate(LAGGEDD = ifelse(LENGTH_RUN == "multiperiod", BETA[VAR_SYMBOL %in% lagged.varsymbols], NA),
+         ERRCT = ifelse(LENGTH_RUN == "multiperiod", BETA[VAR_SYMBOL == "ECT"], NA))
+
+###Manual edits to LAGGEDD and ERRCT to accommodate special cases
+###In Lin&Prince(2013), Hasanov(2015), and Wadud et al (2009) some of the ARDL model specifications contain multiple demand lags. The relevant speed of adjustment coefficient is related to the sum of the estimated coefficients for all the lags.
+
+for(i in 1:max(oilddelastdb2$EQNUM[oilddelastdb2$REFERENCE=="LinPrince2013"])){
+  oilddelastdb2$LAGGEDD[oilddelastdb2$REFERENCE =="LinPrince2013" & oilddelastdb2$EQNUM ==i & oilddelastdb2$LENGTH_RUN == "multiperiod"] <- 
+  sum(oilddelastdb2$BETA[oilddelastdb2$REFERENCE =="LinPrince2013" & oilddelastdb2$EQNUM ==i & grepl("Dt",oilddelastdb2$VAR_SYMBOL)])
+  }
+                                         
+for(i in 9:max(oilddelastdb2$EQNUM[oilddelastdb2$REFERENCE=="Hasanov2015"])){
+  oilddelastdb2$LAGGEDD[oilddelastdb2$REFERENCE =="Hasanov2015" & oilddelastdb2$EQNUM ==i & oilddelastdb2$LENGTH_RUN == "multiperiod"] <- 
+  sum(oilddelastdb2$BETA[oilddelastdb2$REFERENCE =="Hasanov2015" & oilddelastdb2$EQNUM ==i & grepl("Dt",oilddelastdb2$VAR_SYMBOL)] )
+}
+
+oilddelastdb2$LAGGEDD[oilddelastdb2$REFERENCE =="Wadudetal2009" & oilddelastdb2$EST_TECHNIQUE == "DOLS"& oilddelastdb2$LENGTH_RUN == "multiperiod"] <- sum(oilddelastdb2$BETA[oilddelastdb2$REFERENCE =="Wadudetal2009" & oilddelastdb2$EST_TECHNIQUE == "DOLS" & grepl("Dt",oilddelastdb2$VAR_SYMBOL)] )
+
+###In Eltony and Al-Mutairi(1995), the error correction term coefficient is reported with a positive sign (0.52) but interpreted as a well-behaved negative error correction term. I will assume that it can indeed be interpreted as a well-behaved adjustment coefficient (by making it negative)
+oilddelastdb2$ERRCT[oilddelastdb2$REFERENCE =="EltonyAlMutairi1995"] <- -1* oilddelastdb2$ERRCT[oilddelastdb2$REFERENCE =="EltonyAlMutairi1995"] 
+
+#Create SPEED column that tells number of periods to achieve 90% adjustment using the formula provided in Balcombe et al.(2004): t = ln(1-P)/ln(theta) where P is the chosen proportion of the gap between SR and LR demand and theta is the estimated coefficient on lagged demand (or its equivalent from an error correction model)
+
+#Set of model types to which the normalization is applied
+model_speed_normalize.1 <- c("ARDL","distributed lag", "log-linear, Koyck lag", "log-linear, partial adjustment model", "system of equations_consumption and gasoline share", "system of equations_supply&demand", "system of equations_vehicles&fuel")
+model_speed_normalize.2 <- c("cointegration", "cointegration_vector")
+
+oilddelastdb2 <- oilddelastdb2 %>%
+  mutate(SPEED = ifelse(LENGTH_RUN == "1", 1,
+                        ifelse(MODEL_TYPE %in% model_speed_normalize.1 , log(1-0.9)/log(LAGGEDD), 
+                               ifelse(MODEL_TYPE %in% model_speed_normalize.2, log(1-0.9)/log(ERRCT + 1),
+                                      ifelse(DATA_TYPE == "CS" & LENGTH_RUN == "multiperiod", 1,
+                                             ifelse(DATA_TYPE == "CS " & LENGTH_RUN == "multiperiod", 1,
+                                                    ifelse(DATA_TYPE == "CS-TS (mostly CS)" & LENGTH_RUN == "multiperiod", 1, NA)))))))
+
+###Special cases in calculation of the SPEED variable
+###1. Huntington(2010) estimates an ARDL model but shows an equivalent ECM expression as well as the relationship between the estimated coefficients and an error correction adjustment term
+oilddelastdb2$SPEED[oilddelastdb2$REFERENCE == "Huntington2010" & oilddelastdb2$LENGTH_RUN == "multiperiod"] <- 
+  log(1-0.9)/log(oilddelastdb2$LAGGEDD[oilddelastdb2$REFERENCE == "Huntington2010" & oilddelastdb2$LENGTH_RUN == "multiperiod"] + 1)
+
+###2. Hunt&Ninominya(2003) report that lagged demand was insignificant in their ARDL model and the only significant lag is the first lag of the income variable. Therefore, for price, SR and LR elasticities are the same (i.e., the whole adjustment takes place in the first period). For income, 100% of the adjustment would happen in 2 periods.
+oilddelastdb2$SPEED[oilddelastdb2$REFERENCE == "HuntNinomiya2003" & oilddelastdb2$LENGTH_RUN == "multiperiod"] <- 0.9*2
+
+###4. Urga&Walters(2003) and Steinbuks(2012) estimate dynamic linear logit models for interfuel substitutionwhere the lagged variable to be used for computing SPEED is capital rather than demand
+oilddelastdb2$SPEED[oilddelastdb2$REFERENCE == "UrgaWalters2003" & oilddelastdb2$LENGTH_RUN == "multiperiod" & !is.na(oilddelastdb2$LAGGEDD)] <- log(1-0.9)/log(oilddelastdb2$LAGGEDD[oilddelastdb2$REFERENCE == "UrgaWalters2003" & oilddelastdb2$LENGTH_RUN == "multiperiod" & !is.na(oilddelastdb2$LAGGEDD)])
+oilddelastdb2$SPEED[oilddelastdb2$REFERENCE == "Steinbuks2012" & oilddelastdb2$LENGTH_RUN == "multiperiod"] <- log(1-0.9)/log(oilddelastdb2$LAGGEDD[oilddelastdb2$REFERENCE == "Steinbuks2012" & oilddelastdb2$LENGTH_RUN == "multiperiod"])
+
+###5. IMF(2011) states in all tables from which results where collected that "Long-term elasticities are calculated using a 20-year horizon"
+oilddelastdb2$SPEED[oilddelastdb2$REFERENCE == "IMF2011" & oilddelastdb2$LENGTH_RUN == "20"] <- 20
+
+# Create new column that normalizes length-of-run to years 
+oilddelastdb2 <- oilddelastdb2 %>% 
+  mutate(SPEEDYRS = ifelse(FREQUENCY == "monthly", SPEED/12, 
+                           ifelse(FREQUENCY == "quarterly", SPEED/4, 
+                                  ifelse(FREQUENCY == "annual", SPEED, NA))))
+#Note: data frequency does not have much meaning in the case of cross-sectional elasticities treated as long-run observations. SPEEDYRS for those observations will be revised (to equal the average of a given subgroup in the Stage 1 script)
+```
+
+```{r StErrorCalc.Tests, eval=TRUE}
+##Select elasticities for which papers contain estimates of standard errors and enough information to calculate a standard error based on error propagation formula to ascertain whether there is bias in weights based on error propagation. 
+elast.st.select <- oilddelastdb2 %>% 
+  filter(ELASTICITY == "1" & LENGTH_RUN == "multiperiod" & CALC_STERROR =="0")
+
+elast.st.select.modeltype <- elast.st.select %>%
+  group_by(MODEL_TYPE) %>%
+  summarise(count=length(MODEL_TYPE))
+
+##Select only model types for which we have a formula to compute elasticities using error propagation
+elast.st.select <- elast.st.select %>%
+  filter(MODEL_TYPE %in% c("log-linear, partial adjustment model", "cointegration", "cointegration_vector", "ARDL")) %>%
+  mutate(REF.EQ = paste0(REFERENCE, EQNUM))
+
+elast.st.select.REFEQ <- elast.st.select %>%
+  group_by(REF.EQ) %>%
+  summarise(count=length(ELASTICITY))
+
+elast.st.select.REFEQ.2 <- elast.st.select %>%
+  group_by(MODEL_TYPE) %>%
+  summarise(count=length(ELASTICITY))
+
+
+oilddelastdb3 <- oilddelastdb2 %>%
+  select(REFERENCE, EQNUM, LENGTH_RUN, VAR_SYMBOL , BETA, ST_ERROR, CALC_STERROR, MODEL_TYPE, LAGGEDD, ERRCT) %>%
+  mutate(REF.EQ = paste0(REFERENCE, EQNUM),
+         sterror.recalc = 0)
+
+for(i in 1:nrow(oilddelastdb3)){
+  oilddelastdb3$sterror.recalc[i] <- ifelse(oilddelastdb3$REF.EQ[i] %in% elast.st.select.REFEQ$REF.EQ, 1,0)
+}
+
+oilddelastdb.sterr.recalc <- oilddelastdb3 %>%
+  filter(sterror.recalc == 1) %>%
+  as.data.frame()
+  
+oilddelastdb.sterr.recalc.2 <- oilddelastdb.sterr.recalc %>%
+  group_by(REF.EQ) %>%
+  summarise(count=length(BETA))
+
+oilddelastdb.sterr.recalc.3 <- oilddelastdb.sterr.recalc %>%
+  group_by(MODEL_TYPE) %>%
+  summarise(count=length(BETA))
+
+##Calculate standard errors whenever enough information is available for comparison with the standard errors directly provided by the paper 
+##This difference check between reported and calculated standard errors is restricted to long-run elasticities estimated through partial adjustment model equations. 
+
+oilddelastdb.sterr.recalc.4 <- oilddelastdb.sterr.recalc %>%
+  group_by(REF.EQ) %>%
+  #Select info needed to calculated standard errors and compare them to the ones given directly in the paper  
+  mutate(BETA_PSR = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", BETA[VAR_SYMBOL == "Pt"], NA),
+         BETA_YSR = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", BETA[VAR_SYMBOL == "Yt"], NA),
+         STERROR_PSR = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", ST_ERROR[VAR_SYMBOL == "Pt"], NA),
+         STERROR_YSR = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", ST_ERROR[VAR_SYMBOL == "Yt"], NA),
+         STERROR_LAGGEDD = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", ST_ERROR[VAR_SYMBOL %in% lagged.varsymbols], NA),
+         STERROR_PLR = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", ST_ERROR[VAR_SYMBOL == "P"], NA),
+         STERROR_YLR = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", ST_ERROR[VAR_SYMBOL == "Y"], NA),
+   #Calculated version of standard errors         
+         STERROR_PLR.calc = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", 
+                                   round((1/((1-LAGGEDD)^2))*sqrt(((1-LAGGEDD)*STERROR_PSR)^2 + (BETA_PSR*STERROR_LAGGEDD)^2),3),NA),
+         STERROR_YLR.calc = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", 
+                                   round((1/((1-LAGGEDD)^2))*sqrt(((1-LAGGEDD)*STERROR_YSR)^2 + (BETA_YSR*STERROR_LAGGEDD)^2),3),NA),
+         STERROR_PLR.diff = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", round(STERROR_PLR/STERROR_PLR.calc,3), NA),
+         STERROR_YLR.diff = ifelse(MODEL_TYPE == "log-linear, partial adjustment model", round(STERROR_YLR/STERROR_YLR.calc,3), NA)
+         )
+
+#Summarize to have one row per equation
+oilddelastdb.sterr.recalc.4 <- oilddelastdb.sterr.recalc.4 %>%
+  filter(!is.na(STERROR_PLR.calc) & !is.na(STERROR_YLR.calc))
+
+oilddelastdb.sterr.recalc.5 <- oilddelastdb.sterr.recalc.4 %>%
+  group_by(REF.EQ) %>%
+  summarise(STERROR_PLR = mean(STERROR_PLR),
+            STERROR_YLR = mean(STERROR_YLR),
+            STERROR_PLR.calc = mean(STERROR_PLR.calc),
+            STERROR_YLR.calc = mean(STERROR_YLR.calc),
+            STERROR_PLR.diff = mean(STERROR_PLR.diff),
+            STERROR_YLR.diff = mean(STERROR_YLR.diff)
+                        )
+
+oilddelastdb.sterr.recalc.summ <- oilddelastdb.sterr.recalc.5 %>%
+  filter(!is.na(STERROR_PLR.diff)) %>%
+  select(REF.EQ, STERROR_PLR.diff, STERROR_YLR.diff) %>%
+  pivot_longer(cols = c(-REF.EQ), names_to = "DiffType", values_to = "VALUE") %>%
+  mutate(VAR_TYPE = substr(DiffType, 9, 9))
+
+oilddelastdb.sterr.recalc.diff.plot <- ggplot(oilddelastdb.sterr.recalc.summ, aes(x=REF.EQ, y=VALUE)) + 
+  geom_point(size=2) + 
+  facet_wrap(~VAR_TYPE, ncol = 1) +
+  labs(x="", y="Reported Standard Error/Calculated Standard Error", title="")+  
+  theme(strip.text.x = element_text(size = 11)) + 
+  theme(plot.title=element_text(size=14, face="bold", hjust = 0.5)) +
+  theme(axis.text.x=element_text(size=10, angle=65, hjust=1),axis.text.y=element_text(size=10), axis.title=element_text(size=11,face="bold")) +
+  theme(legend.text=element_text(size=10), legend.title=element_text(size=11, face = "bold"), legend.key=element_blank(), legend.position="right") +
+  theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(size=0.25, color="grey"), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+oilddelastdb.sterr.recalc.diff.plot
+```
+
+
+Create subset database "allelast" with only those rows that contain elasticity observations (the ones that will be used for the metaregression)
+
+``` {r ElastOnly.DB, eval=TRUE}
+# Extract subset of rows that contain elasticity estimates
+# Eliminate set of time-varying elasticities from Ryan and Plourde(2002) (I only extracted data for 1 in a set of 12 graphs using OCR methods it seems better to leave these values out of the final sample used for the metaregression analysis since they are not directly reported in the paper)
+allelast <- oilddelastdb2 %>%
+  filter(ELASTICITY == 1) %>%
+  filter(REFERENCE != "RyanPlourde2002"| REFERENCE == "RyanPlourde2002" & is.na(T_STAT))
+
+
+# Drop elasticity estimates for which no information on the speed of adjustment is available 
+##Subset them into a separate data.frame in case they are needed later and then drop them from the main database
+allelast.NAspeed <- allelast[is.na(allelast$SPEED),]
+allelast <- allelast[!(is.na(allelast$SPEED)|is.nan(allelast$SPEED)) ,]
+# Note: The NAs reflect cases for which we have no information to compute the speed of adjustment. The NaNs reflect cases in which the calculation failed (because there was a log of a negative number)
+
+# Classify elasticity estimates as either PRICE or INCOME elasticity
+allelast <- allelast %>%
+  mutate(TYPE = substr(VAR_SYMBOL, 1, 1))
+```
+
+``` {r defineElasLengthVars, eval=TRUE}
+# Create a column that assigns length of run to each elasticity estimate
+# There are a few special cases in which length of run is >1 in papers using quarterly data. In all those cases, the number of periods corresponds to lengths of run less than or equal to one year. Those instances are classified as short-run elasticities.
+# The only special case in papers using annual data is in IMF(2011) where the long-run elasticities are described as being 20-year elasticities. I classified those as long-run elasticities.
+allelast <- allelast %>%
+  mutate(LENGTH = ifelse(LENGTH_RUN == 1 & P_DYNAMIC == 1 | LENGTH_RUN == 1 & Y_DYNAMIC == 1 | LENGTH_RUN == 2 | LENGTH_RUN == 5, "SR",
+                          ifelse(LENGTH_RUN == 1 & P_DYNAMIC == 0 | LENGTH_RUN == 1 & Y_DYNAMIC == 0, "IR",
+                                 ifelse(LENGTH_RUN == "multiperiod" | LENGTH_RUN == 20, "LR", NA))))
+
+
+# Combine type and length of run attributes
+# Combine short-run and intermediate-run estimates into an expanded short-run category
+allelast <- allelast %>%
+  mutate(TYPE_LENGTH = paste0(TYPE, "_", LENGTH),
+         TYPE_LENGTH2 = ifelse(TYPE_LENGTH %in% c("P_SR", "P_IR"), "P_SR",
+                               ifelse(TYPE_LENGTH %in% c("Y_SR", "Y_IR"), "Y_SR",
+                                      ifelse(TYPE_LENGTH == "P_LR", "P_LR",
+                                             ifelse(TYPE_LENGTH == "Y_LR", "Y_LR", NA)))))
+
+
+summstats.typelength <- allelast %>%
+  group_by(TYPE_LENGTH2) %>%
+  summarise(count = length(ELASTICITY), average = round(mean(BETA),3), median = round(median(BETA),3), stdev = round(sd(BETA),3), min = round(min(BETA),3), max = round(max(BETA),3))
+
+
+# Create histograms to summarize the frequency and range of estimates in each category
+hist.typelength <- ggplot(allelast, aes(x=BETA)) +
+  geom_histogram() +
+  facet_wrap(~TYPE_LENGTH2, ncol =2) +
+  theme(axis.text.x = element_text(face="bold",angle = 45, vjust = .95,hjust=.95))+
+  labs(y="count", x="Elasticity", title = "Elasticity Histograms by Type and Length of Run")+ 
+  scale_x_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  theme(axis.text.x=element_text(size=12),axis.text.y=element_text(size=12), axis.title=element_text(size=12)) +
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5))+
+  theme(panel.grid.major.y = element_line( size=.1, color="grey" ) ,panel.grid.major.x = element_blank(),panel.grid.minor = element_blank(),panel.background = element_blank(),panel.border = element_blank(), axis.line = element_line(colour = "black")) 
+hist.typelength
+
+# Plot the relationship between elasticity and length of run
+elast.lengthrun.plot <- ggplot(allelast[allelast$TYPE_LENGTH2 == "P_LR",], aes(x=SPEEDYRS, y=BETA)) + 
+  facet_grid(~TYPE) +
+  geom_point(colour="red", shape=21) +
+  geom_smooth(method = "lm", formula=y~x, size = 1.1) +
+  geom_hline(yintercept=0,linetype="dashed")+
+  labs(y="Elasticity", x="Length of run (years)", title = "")+ 
+  theme(axis.text.x=element_text(size=12),axis.text.y=element_text(size=12), axis.title=element_text(size=12)) +
+  theme(plot.title=element_text(size=16, face="bold"))+
+  scale_y_continuous(expand = c(0,0), limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  scale_x_continuous(expand = c(0,0), limits = c(0, 20), breaks = pretty_breaks(n = 10)) 
+elast.lengthrun.plot
+```
+
+```{r ElastbyNetexp, eval=TRUE}
+#boxplot showing differences in distribution elasticities for net exporting and net importing countries
+allelast <- allelast %>%
+  mutate(NETEXP = ifelse(avg_NETEXP <= 0, "Net_Importers", "Net_Exporters"),
+         EXPCONS.ratio = avg_NETEXP/cons)
+
+elast.netexp.bplot <- ggplot(allelast, aes(x=NETEXP, y=BETA)) + 
+  geom_boxplot() + 
+  facet_wrap(~TYPE_LENGTH2, ncol = 4, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  labs(x="", y="Elasticity", title="Elasticity distributions for importing vs. exporting countries") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=18, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.netexp.bplot 
+
+#scatterplots showing the relationship between elasticity and average net export levels
+elast.netexp.splot <- ggplot(allelast, aes(x=avg_NETEXP, y=BETA)) + 
+  geom_point(shape = 16, size=1, color="blue3") + 
+  geom_smooth(data = allelast, method = "lm", se= FALSE, color = "red") +
+  facet_wrap(~TYPE_LENGTH2, ncol = 2, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  labs(x="", y="Elasticity", title="Elasticity vs. net export levels") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=18, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.netexp.splot 
+
+elast.expcons.plot <- ggplot(allelast, aes(x=EXPCONS.ratio, y=BETA)) + 
+  geom_point(shape = 16, size=1, color="blue3") + 
+  geom_smooth(data = allelast, method = "lm", se= FALSE, color = "red") +
+  facet_wrap(~TYPE_LENGTH2, ncol = 2, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  labs(x="", y="Elasticity", title="Elasticity vs. net exports to consumption ratio") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.expcons.plot 
+```
+
+```{r product_sector, eval=TRUE}
+# Consolidate levels for PRODUCT_SECTOR variable
+allelast <- allelast %>%
+  mutate(PROD_SECT = ifelse(PRODUCT_SECTOR %in% c("Gasoline_transportation", "Gasoline"), "Gasoline",
+                            ifelse(PRODUCT_SECTOR %in% c("Diesel_transportation", "Fuel_oil_transportation", "Diesel"), "Diesel",
+                                   ifelse(PRODUCT_SECTOR %in% c("Kerosene", "LPG", "Other_oil", "Jet_fuel"), "Other_oil_products",
+                                          ifelse(PRODUCT_SECTOR %in% c("Total_oil", "Total_petroleum_products"), "Total_oil",
+                                                 ifelse(PRODUCT_SECTOR %in% c("Gas_oil_residential", "Gasoline_residential", "Oil_residential", "LPG_residential","Kerosene_residential"), "Residential",
+                                                        ifelse(PRODUCT_SECTOR %in% c("Diesel_industrial","Gas_oil_industrial","Heavy_fuel_industrial","Oil_industrial"), "Industrial",
+                                                               ifelse(PRODUCT_SECTOR %in% c("Oil_electric_generation","Diesel_electricity_generation"), "ElecGen",
+                                                                      ifelse(PRODUCT_SECTOR %in% c("Oil_transportation", "Transportation_gasoline_diesel"), "Transportation",
+                                                                             ifelse(PRODUCT_SECTOR %in% c("Fuel_oil_nontransportation", "Oil_commercial", "Oil_nontransportation"), "Non_Transportation",
+                                                                                    ifelse(PRODUCT_SECTOR == "Residual_fuel_oil", "Residual_fuel_oil",
+                                                                                           ifelse(PRODUCT_SECTOR %in% c("Oil_electric_generation", "Diesel_electricity_generation"), "Electricity_Generation", NA))))))))))))
+
+
+summstats_sector <- allelast %>% 
+  group_by(TYPE_LENGTH2, PROD_SECT) %>% 
+  summarise(count = length(ELASTICITY), median = round(median(BETA),3), average = round(mean(BETA),3), min = round(min(BETA),3), max = round(max(BETA),3))
+print(summstats_sector)
+
+#Boxplots to summarize elasticity ranges by sector (price elasticities)
+#Price elasticities
+elast.typelength_p_prodsect.plot <- ggplot(subset(allelast, TYPE == "P"), aes(x=PROD_SECT, y=BETA)) + 
+  geom_boxplot() +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~TYPE_LENGTH2, nrow = 1, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  labs(x="", y="Elasticity", title="") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.typelength_p_prodsect.plot
+
+
+#Income elasticities
+elast.typelength_y_prodsect.plot <- ggplot(subset(allelast, TYPE == "Y"), aes(x=PROD_SECT, y=BETA)) + 
+  geom_boxplot() +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~TYPE_LENGTH2, nrow = 1, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  labs(x="", y="Elasticity", title="") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.typelength_y_prodsect.plot
+```
+Notes regarding classification of fuel oil and residual fuel oil: 
+http://www.eia.gov/tools/glossary/index.cfm?id=distillate%20fuel%20oil
+http://www.eia.gov/tools/glossary/index.cfm?id=residual%20fuel%20oil
+- Fuel oil is interpreted as distillate fuel oil (as opposed to residual fuel oil). Distillate fuel oil corresponds to No.1, No.2 and No.4 distillates. No.1 Diesel Fuel is used for diesel vehicles, No.2 Diesel Fuel is used in locomotives, trucks and automobiles (therefore, I interpreted the "Fuel oil for transportation sector" category as referring to diesel). No.1 Fuel Oil is used in portable outdoor stoves and portable outdoor heaters. No.2 Fuel Oil is heating oil used mostly for domestic heating or moderate capacity commercial/industrial burner units. 
+- Residual fuel oil refers to No.4 and No.6 fuel oils. It is used in steam-powered vessels and in power plants. No.6 fuel oil includes Bunker C fuel oil and is used for the production of electric power, space heating, vessel bunkering, and various industrial purposes 
+
+Only two papers have "Fuel Oil" as a product category: Chakravortyetal2000 and BhattarchayaBlake2009. In both cases, they use IEA as source of data. IEA provides energy consumption statistics for 5 products: LPG, kerosene, gasoline, diesel and fuel oil. According to IEA, fuel oil is used in residential and industrial applications (https://www.iea.org/publications/freepublications/publication/kwes.pdf). For the purposes of this analysis, "Fuel Oil" is included in the "Residual Fuel Oil" Category.
+
+Ideally, we would like to classify all product types/sectors into the categories provided in IEO (in order to project evolution of elasticities over time): Residential, Commercial, Industrial, Transportation, Electricity, Total.
+If we are going to use the SUR approach for the metarregression, the easiest (and probably best) way to go would be distinguishing transportation and non-transportation at OECD and non-OECD. As we get into further detail, the decision of where to include some of the estimates becomes more complicated.
+
+```{r region, eval=TRUE}
+# Consolidate REGION levels into smaller number of categories in a new factor called REG
+REG_US <- c("United States", "US", "US_household", "US_Northeast", "US_Midwest", "US_West", "US_South" ) 
+REG_OECD <- 
+#List of member countries
+  c("Australia", "Austria", "Belgium", "Canada", "Chile", "Czech Republic", "Denmark", "Estonia", "Finland", "France", "Germany", "Greece", "Hungary","Iceland","Ireland", "Israel","Italy","Japan","Korea","Latvia","Luxembourg","Mexico","Netherlands","New Zealand","Norway","Poland","Portugal","Slovak Republic","Slovenia","Spain","Sweden","Switzerland","Turkey","United Kingdom", "United States",
+#Additional nomenclatures in the database that should be assigned to OECD region
+"OECD", "OECD 16", "OECD14","OECD23", "OECD30", "Canada_Atlantic Provinces",  "Canada_British Columbia","Canada_Ontario", "Canada_Prairie Provinces", "Canada_Quebec", "G-7", "G7/OECD", "South Korea", "Euro area", "Europe (14)", "UK","Germany_household", "Lisbon")
+REG_Exporters <- c("Algeria","Bahrain","Indonesia", "Iran", "Iraq", "Kuwait", "Lybia","Nigeria","Oil exporters", "Oman", "Saudi Arabia", "UAE", "Venezuela", "Qatar", "Afghanistan, Algeria, Angola, Azerbaijan, Bahrain, Brunei, China, Djibouti, Egypt, Ghana, Indonesia, Iran, Iraq, Kazakhstan, Kyrgyz Republic, Kuwait, Libya, Malaysia, Nigeria, Oman, Philippines, Qatar, Saudi Arabia, Sudan, Suriname, Syria, Turkmenistan, UAE, Uzbekistan, Venezuela, Vietnam, Yemen")
+REG_IncGrow <- c("Income Growers","India", "Taiwan","Thailand","Egypt","Pakistan","Sri Lanka", "Transition")
+REG_ROW <- c("South Africa", "Latin America","Namibia","Non-Japan Asia", "Other countries", "Other Development Economies", "Philippines", "Indonesia", "Java", "Fiji", "Rest of World", "Morocco", "Senegal" )
+REG_World <- c("World", "OECD and non-OECD")
+  
+allelast <- allelast %>%
+  mutate(REG = ifelse(REGION %in% REG_US, "US",
+                  ifelse(REGION %in% REG_OECD, "OECD",
+                         ifelse(REGION %in% REG_Exporters, "Oil_Exporters",
+                                ifelse(REGION %in% REG_IncGrow, "Income_Growers",
+                                       ifelse(REGION %in% REG_ROW, "Rest_of_World",
+                                              ifelse(REGION %in% REG_World,"World",
+                                                     ifelse(REGION == "non-OECD", "non-OECD", 
+                                                            ifelse(REGION == "China", "China",
+                                                                   ifelse(REGION =="Brazil", "Brazil", 
+                                                                          ifelse(REGION =="FSU", "FSU", "NA")))))))))))
+
+
+#Summarize range of estimates by TYPE_LENGTH and REG
+summstats_region <- allelast %>% 
+  group_by(TYPE_LENGTH2, REG) %>% 
+  summarise(count = length(ELASTICITY), average = round(mean(BETA),3), median = round(median(BETA),3), stdev = round(sd(BETA),3), min = round(min(BETA),3), max = round(max(BETA),3))
+print(summstats_region)
+
+#Create set of boxplots to summarize elasticity ranges by region
+#Price elasticities
+elast.typelength_p_region.plot <- ggplot(subset(allelast, TYPE == "P"), aes(x=REG, y=BETA)) + 
+  geom_boxplot() +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~TYPE_LENGTH2, nrow = 1, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  labs(x="", y="Elasticity", title="") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.typelength_p_region.plot
+
+
+#Income elasticities
+elast.typelength_y_region.plot <- ggplot(subset(allelast, TYPE == "Y"), aes(x=REG, y=BETA)) + 
+  geom_boxplot() +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~TYPE_LENGTH2, nrow = 1, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  labs(x="", y="Elasticity", title="") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.typelength_y_region.plot
+```
+
+```{r avgyr, eval=TRUE}
+allelast <- allelast %>%
+  mutate(AVGYR = 0.5*(YEAR_END + YEAR_START))
+
+# Plot showing elasticity estimates in the y-axis and average year of the analysis in the x-axis (different lengths of run are depicted with different colors)
+
+elast.avgyr.plot <- ggplot(allelast, aes(x=AVGYR, y=BETA, color=LENGTH)) + 
+  geom_point(shape = 16, size=1) + 
+  geom_smooth(data = allelast, method = "lm", se= FALSE, color = "red") +
+  facet_wrap(~TYPE, ncol = 2, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  #scale_x_continuous(breaks = pretty_breaks(n = 10)) + 
+  labs(x="", y="Elasticity", title="Elasticity vs. Average Year of Analysis Period") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=18, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.avgyr.plot 
+```
+Graphs showing temporal evolution were truncated to show only elasticities in the (-2, 2) range
+Note: These graphs do not include the Krichene(2002) study whose average years (1945 and 1958) is much lower than the rest of the sample
+```{r methods, eval=TRUE}
+ARDL_set<- c("ARDL", "ARDL_differences", "distributed lag", "log-linear, Koyck lag","log-linear, partial adjustment model", "partial adjustment model", "error correction model", "VECM")
+cointegration_set<- c("cointegration","cointegration_vector")
+linear_set <- c("log-linear demand function", "log-linear Engel curve")
+semiparametric_set <- c("semiparametric smooth coefficient model", "partial linear demand function")
+
+allelast <- allelast %>%
+  mutate(MODEL_TYPE2 = ifelse(MODEL_TYPE %in% ARDL_set, "ARDL", 
+                              ifelse(MODEL_TYPE %in% cointegration_set, "cointegration", 
+                                     ifelse(grepl("flex",MODEL_TYPE), "flex_form", 
+                                            ifelse(grepl("system",MODEL_TYPE),"system", 
+                                                   ifelse(MODEL_TYPE %in% linear_set, "linear_static", 
+                                                          ifelse(MODEL_TYPE %in% semiparametric_set, "semiparametric", 
+                                                                 ifelse(MODEL_TYPE == "dynamic stochastic general equilibrium", "DSGE", 
+                                                                        ifelse(MODEL_TYPE == "SVAR", "SVAR", "NA")))))))))
+
+allelast$MODEL_TYPE2 <- as.factor(allelast$MODEL_TYPE2)
+
+# Summary of methodologies used by studies in the database
+summstats_model <- allelast %>% 
+  group_by(TYPE_LENGTH2, MODEL_TYPE2) %>% 
+  summarise(count = length(ELASTICITY), median = round(median(BETA),3), min = round(min(BETA),3), max = round(max(BETA),3))
+print(summstats_model)
+
+#Create set of boxplots to summarize elasticity ranges by methodologies
+#Price elasticities
+elast.typelength_p_method.plot <- ggplot(subset(allelast, TYPE == "P"), aes(x=MODEL_TYPE2, y=BETA)) + 
+  geom_boxplot() +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~TYPE_LENGTH2, nrow = 1, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  labs(x="", y="Elasticity", title="") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.typelength_p_method.plot
+
+
+#Income elasticities
+elast.typelength_y_method.plot <- ggplot(subset(allelast, TYPE == "Y"), aes(x=MODEL_TYPE2, y=BETA)) + 
+  geom_boxplot() +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~TYPE_LENGTH2, nrow = 1, scales = "free") +
+  scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
+  labs(x="", y="Elasticity", title="") + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5)) +
+  theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=14,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "right") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+elast.typelength_y_method.plot
+```
+
+## Explore elasticity with respect to Pmax relative to other elasticities
+
+```{r Pmaxplot, eval=TRUE}
+## Select set of papers that include Pmax as part of their explanatory variables
+Pmax.references.list <- allelast %>%
+  filter(grepl("Pmax",VAR_SYMBOL) == TRUE) %>%
+  group_by(REFERENCE) %>% 
+  summarize(count = length(REFERENCE)) %>%
+  pull(REFERENCE)
+
+
+allelast.Pmax <- allelast %>%
+  filter(REFERENCE %in% Pmax.references.list & TYPE == "P") %>%
+  mutate(Pmax = ifelse(substr(VAR_SYMBOL, 1, 4) == "Pmax","Pmax","Psubmax"))
+
+Pmax.plot <- ggplot(allelast.Pmax, aes(x=BETA, y=REFERENCE, color = Pmax)) + 
+  geom_point(shape = 16, size = 2)  + 
+  facet_wrap(~LENGTH, ncol=1) + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  labs(x="", y="Elasticity", title=" ") + 
+  theme(plot.title=element_text(size=14, face="bold")) +
+  theme(axis.text.x=element_text(size=12, angle=0, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=12,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "bottom") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))
+Pmax.plot
+
+allelast.Pmax.summary <- allelast.Pmax %>%
+  group_by(REFERENCE, LENGTH, PRODUCT_SECTOR, REGION, Pmax) %>%
+  summarise(average = mean(BETA)) %>%
+  mutate(label = paste0(REFERENCE, PRODUCT_SECTOR, REGION))
+
+
+allelast.Pmax.summary.SR <- allelast.Pmax.summary %>%
+  filter(LENGTH == "SR")
+
+Pmax.plot.SR <- ggplot(allelast.Pmax.summary.SR, aes(x=average, y=label, color = Pmax)) + 
+  geom_point(shape = 16, size = 3) + 
+  theme(strip.text.x = element_text(size = 12)) + 
+  labs(x="Short-Run Demand Elasticity", y="Reference + Product + Region", title=" ") + 
+  theme(plot.title=element_text(size=14, face="bold")) +
+  theme(axis.text.x=element_text(size=12, angle=0, hjust=1),axis.text.y=element_text(size=10), axis.title=element_text(size=12,face="bold")) +
+  theme(legend.text=element_text(size=12), legend.title=element_blank(), legend.key=element_blank(), legend.position = "bottom") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))
+Pmax.plot.SR
+
+allelast.Pmax.summary.Pmax <- allelast.Pmax.summary %>% filter(Pmax =="Pmax")
+allelast.Pmax.summary.Psubmax <- allelast.Pmax.summary %>% filter(Pmax =="Psubmax")
+
+allelast.Pmax.summary.w <- allelast.Pmax.summary.Pmax %>%
+  right_join(allelast.Pmax.summary.Psubmax, by=c("REFERENCE", "LENGTH","PRODUCT_SECTOR","REGION","label"), all.y = TRUE) %>%
+  filter(!is.na(average.x) & !is.na(average.y)) %>%
+  mutate(abs.diff = average.x - average.y,
+         rel.diff = average.x / average.y) %>%
+  filter(rel.diff != "-Inf")
+
+
+allelast.Pmax.summary.w.2 <- allelast.Pmax.summary.w %>%
+  group_by(LENGTH) %>%
+  summarize(average.abs.diff = mean(abs.diff), average.rel.diff = mean(rel.diff))
+```
+
+
+
+Save Database for metaregression analysis
+------------------------------------------
+
+```{r saveElast, eval=TRUE}
+summary(allelast)
+
+save(allelast,file="../Data/allelast_v1")
+save(allelast.NAspeed, file="../Data/allelast_v1_NAspeed")
+```
+
+
