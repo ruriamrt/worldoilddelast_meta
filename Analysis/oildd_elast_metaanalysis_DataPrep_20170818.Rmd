@@ -604,7 +604,7 @@ oilddelastdb.sterr.recalc.diff.plot <- ggplot(oilddelastdb.sterr.recalc.summ, ae
   theme(plot.title=element_text(size=14, face="bold", hjust = 0.5)) +
   theme(axis.text.x=element_text(size=10, angle=65, hjust=1),axis.text.y=element_text(size=10), axis.title=element_text(size=11,face="bold")) +
   theme(legend.text=element_text(size=10), legend.title=element_text(size=11, face = "bold"), legend.key=element_blank(), legend.position="right") +
-  theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(size=0.25, color="grey"), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
+  theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linewidth=0.25, color="grey"), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
 oilddelastdb.sterr.recalc.diff.plot
 ```
 
@@ -664,7 +664,7 @@ hist.typelength <- ggplot(allelast, aes(x=BETA)) +
   scale_x_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
   theme(axis.text.x=element_text(size=12),axis.text.y=element_text(size=12), axis.title=element_text(size=12)) +
   theme(plot.title=element_text(size=14, face="bold", hjust=0.5))+
-  theme(panel.grid.major.y = element_line( size=.1, color="grey" ) ,panel.grid.major.x = element_blank(),panel.grid.minor = element_blank(),panel.background = element_blank(),panel.border = element_blank(), axis.line = element_line(colour = "black")) 
+  theme(panel.grid.major.y = element_line(linewidth=.1, color="grey" ) ,panel.grid.major.x = element_blank(),panel.grid.minor = element_blank(),panel.background = element_blank(),panel.border = element_blank(), axis.line = element_line(colour = "black")) 
 hist.typelength
 
 # Plot the relationship between elasticity and length of run

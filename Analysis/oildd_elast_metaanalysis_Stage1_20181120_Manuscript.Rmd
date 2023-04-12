@@ -27,7 +27,9 @@ abstract: Oil demand elasticities are important behavioral parameters for assess
 keywords: petroleum demand, elasticity, meta-analysis
   
 #bibliography: mybibfile.bib
-output: rticles::elsevier_article
+geometry: margin=2cm
+output: pdf_document 
+
 ---
 
 <!--_Text based on elsarticle sample manuscript, see [http://www.elsevier.com/author-schemas/latex-instructions#elsarticle](http://www.elsevier.com/author-schemas/latex-instructions#elsarticle)_
@@ -68,36 +70,25 @@ Chunk 29: WorldElast.compare (comparison plot between short-run world oil demand
 Chunk 30: out_elastcompare
 -->
 
-```{r global_options, include=FALSE}
-library(knitr)
-#opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
-```
-
-```{r setup, include=FALSE}
-#workdir = "C:/Projects/SPR/oil_elasticities/Journal article" # for Rocio's machine
-#workdir = "D:/SPR/2015SPR_LTSR/Data/DemandSupplyElasticities/DElasAnalysis/JournalArticle"  # for Paul's work desktop
-
-knitr::opts_chunk$set(root.dir = workdir,
-                      fig.align = 'center')
-```
 
 ```{r loadLibraries, eval=TRUE, include=FALSE}
 library(tidyverse)
 library(broom)
+library(broom.mixed)
 library(readxl)
 library(scales)
-library(car) #needed for computing variance inflation factors which help evaluating the extent to which multicollinearity is an issue
 library(grid)
 library(gridExtra)
 library(stargazer) #to produce nice tables for the results
-library(rticles)
+library(knitr)
 
-library(truncnorm)
+library(car) #for computing variance inflation factors to evaluate the extent to which multicollinearity is an issue
+library(truncnorm) #for truncated normal distribution
 library(lmtest)
 library(sandwich)
-library(multiwayvcov) #used to compute cluster-robust standard errors
-library(lme4) #used for linear mixed effects estimation
-library(ICC) #used for computing intraclass correlation coefficients
+library(multiwayvcov) #to compute cluster-robust standard errors
+library(lme4) #for linear mixed effects estimation
+library(ICC) #for computing intraclass correlation coefficients
 
 #library(kableExtra)
 
@@ -142,9 +133,11 @@ load(file="../Data/allelast_v1_NAspeed")
 #Convert from tibble to data.frame so that row.names can be reset as needed
 allelast <- as.data.frame(allelast)
 
+#Change spelling of references using non-English characters to avoid errors when they are used as input in plots
+allelast$REFERENCE[allelast$REFERENCE == "GundimedaK\xf6hlin2008"] <- "GundimedaKohlin2008"
+
 #Drop studies published before year 2000 and implausibly large elasticities
-#allelast <- subset(allelast, STUDY_YR > 1999 & abs(BETA)< 3)
-allelast <- subset(allelast, STUDY_YR > 1999 & abs(BETA)< 5)
+allelast <- subset(allelast, STUDY_YR > 1999 & abs(BETA) < 5)
 rownames(allelast) <- seq_len( nrow(allelast))  #reset row.names so that it matches the current length of the allelast dataframe
 
 #Drop observations for which the relevant cross section variables (PRICE.1998 for price elasts or rgdpecap.1998 for income elasts) are NAs
@@ -176,11 +169,6 @@ rownames(allelast) <- seq_len( nrow(allelast))
 #Drop observations where the standard error was estimated
 #allelast <- subset(allelast, CALC_STERROR =="0")
 #rownames(allelast) <- seq_len( nrow(allelast))
-
-# reference.list <- allelast %>%
-#   group_by(REFERENCE) %>%
-#   summarize(beta.count = sum(BETA))
-# write.csv(reference.list, file="reflist.csv")
 ```
 
 2. Meta-Analysis Database Description
@@ -228,7 +216,7 @@ paper.periods <-
   theme(axis.text.x=element_text(size=10, angle=65, hjust=1),axis.text.y=element_text(size=10), axis.title=element_text(size=10,face="bold")) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
 paper.periods 
-ggsave("paper.periods.png", width=6.5, height=4.5, units="in", dpi=600)
+ggsave("../Output/paper.periods.png", width=6.5, height=4.5, units="in", dpi=600)
 ```
 ```{r out_paperperiods, echo = FALSE, warning =FALSE, message=FALSE }
 paper.periods
@@ -348,7 +336,7 @@ g8.forest.plot <-
         theme(panel.grid.major.x = element_line(colour = "grey"), panel.grid.minor.x = element_line(colour = "grey"), panel.background = element_blank(), 
               axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1)) 
 g8.forest.plot
-ggsave("g8.forest.plot.png", width=6.5, height=4.5, units="in", dpi=600)
+ggsave("../Output/g8.forest.plot.png", width=6.5, height=4.5, units="in", dpi=600)
 
 #Plot elasticity values against their standard errors
 elastsubset <- subset(allelast, TYPE_LENGTH2 == "Y_LR" & RoadTransp == "0")
@@ -606,7 +594,7 @@ g8.baselinesEstimated = list()  # saves baseline elasticities and other results 
     
 
 for (i in 1:nrow(g8.selectorSets)) {
-  #for (i in 6:6) {
+  #for (i in 1:1) {
   print(i)
  
   g8.curr_varList = ifelse(substr(g8.selectorSets[i,1], 1, 4)=="P_SR" & g8.selectorSets[i,2] == "1" & g8.selectorSets[i,3] == "0", list(all_varList_P_SR.Transp),
@@ -732,8 +720,8 @@ if(length(g8.curr_obsSel2[g8.curr_obsSel2 == "TRUE"]) < length(g8.curr_obsSel[g8
                               subset=g8.curr_obsSel2,
                               weights = PRECISION )
          g8.curr_model2.lme <- lmer(formula=g8.curr_formula.lme, data=allelast,
-                              subset=g8.curr_obsSel2, 
-                              weights = PRECISION, REML = FALSE)
+                                subset=g8.curr_obsSel2, 
+                                weights = PRECISION, REML = FALSE)
           g8.curr_model2.ols <- lm(formula=g8.curr_formula.ols, data=allelast, 
                                     subset=g8.curr_obsSel2)
     
@@ -794,7 +782,7 @@ if(length(g8.curr_obsSel2[g8.curr_obsSel2 == "TRUE"]) < length(g8.curr_obsSel[g8
     ## Normality of residuals 
     print(shapiro.test(g8.curr_model2$residuals)) # Shapiro-Wilk normality test (null hypothesis: residuals are normally distributed)
     ## Heteroskedasticity
-    plot(g8.curr_model2$fitted.values, g8.curr_model2$residuals, title = "Residuals vs. Fitted Values")
+    plot(g8.curr_model2$fitted.values, g8.curr_model2$residuals, main = "Residuals vs. Fitted Values")
     print(bptest(g8.curr_model2))     #print results from Breusch-Pagan test
     
 #Results from LME estimation    
@@ -807,6 +795,8 @@ if(length(g8.curr_obsSel2[g8.curr_obsSel2 == "TRUE"]) < length(g8.curr_obsSel[g8
     print(summary(g8.curr_model2.ols))  #print summary of OLS regression
     print(coeftest(g8.curr_model2.ols, g8.HC.vcov.2))   #print coefficient tests of OLS regression based on heteroskedasticity-consistent standard errors    
     #print(summaryw(g8.curr_model2.ols)) #print summary of OLS regression based on heteroskedasticity-consistent standard errors
+
+
 #Compute baseline elasticity and associated standard error
 #=========================================================
 
@@ -1032,12 +1022,13 @@ g8.modelsEstimated2.raw[[i]] = g8.curr_model2
 g8.coeffsEstimated2[[i]] = coeftest(g8.curr_model2, g8.clust.vcov.2)
 g8.WLS.elastID[[i]] <- data.frame(ElastID= rep(g8.subsetString2, nrow(g8.coeffsEstimated2[[i]])))
 
+#g8.modelsEstimated2.LME[[i]] = broom.mixed::tidy(g8.curr_model2.lme)
 g8.modelsEstimated2.LME[[i]] = tidy(g8.curr_model2.lme)
 g8.modelsEstimated2.LME.raw[[i]] = g8.curr_model2.lme
 g8.LME.elastID[[i]] <- data.frame(ElastID= rep(g8.subsetString2, nrow(g8.modelsEstimated2.LME[[i]])))
 g8.vifEstimated2[[i]] = vif(g8.curr_model2)
 
-g8.LRT[[i]] <- tidy(lrtest(g8.curr_model2.lme, g8.curr_model2))
+g8.LRT[[i]] <- lrtest(g8.curr_model2.lme, g8.curr_model2)
 
 g8.modelsEstimated2.OLS[[i]] = tidy(g8.curr_model2.ols)
 g8.coeffsEstimated2.OLS[[i]] = coeftest(g8.curr_model2.ols, g8.HC.vcov.2)
@@ -1073,7 +1064,7 @@ g8.baselinesEstimated[[i]] = c(g8.subsetString2,
                                as.numeric(round(g8.stdv_base_elast.clustse.prodpmax,6)),
               
                                ##LME-related results
-                               round(mean(augment(g8.curr_model2.lme)[,".fitted"]),4),
+                               round(mean(pull(augment(g8.curr_model2.lme)[,".fitted"])),4),
                                as.numeric(round(glance(g8.curr_model2.lme)$sigma,4)), 
                                as.numeric(round(g8.base_elast.LME,6)), 
                                as.numeric(round(g8.stdv_base_elast.LME,6)),
@@ -1131,6 +1122,9 @@ g8.baselinesEstimated[[i]] = c(g8.subsetString2,
 }
 ###End of metaregression loop
 
+```
+
+```{r metareg.store, echo = FALSE, warning =FALSE, message=FALSE }
 # Store metaregression coefficients and metaregression id strings from WLS, LME, and OLS specifications into data.frames to be bound and exported to a .csv file
 
 ## WLS
@@ -1139,7 +1133,7 @@ g8.metareg.results2 <- do.call("rbind", g8.modelsEstimated2) ## store metaregres
 coefs.clust.se <- function(x){round(x[,c(1:4)],8)}
 g8.metareg.results.clust.se <- lapply(g8.coeffsEstimated2, coefs.clust.se)
 g8.coefs.all.clust.se <-(do.call("rbind",g8.metareg.results.clust.se))
-g8.coefs.all.clust.se <- add_rownames(as.data.frame(g8.coefs.all.clust.se), "variable")
+g8.coefs.all.clust.se <- rownames_to_column(as.data.frame(g8.coefs.all.clust.se), "variable")
 g8.WLS.elastIDs <- (do.call("rbind",g8.WLS.elastID))
 g8.coefs.all.clust.se.ID <- cbind(g8.WLS.elastIDs,g8.coefs.all.clust.se)
 g8.coefs.all.clust.se.ID <- as.data.frame(g8.coefs.all.clust.se.ID)
@@ -1156,14 +1150,14 @@ coefs.hc.se <- function(x){round(x[,c(1:4)],8)}
 g8.metareg.results.hc.se <- lapply(g8.coeffsEstimated2.OLS, coefs.hc.se)
 #g8.metareg.results.hc.se <- lapply(summaryw(g8.modelsEstimated2.OLS), coefs.hc.se)
 g8.coefs.all.hc.se <-(do.call("rbind",g8.metareg.results.hc.se))
-g8.coefs.all.hc.se <- add_rownames(as.data.frame(g8.coefs.all.hc.se), "variable")
+g8.coefs.all.hc.se <- rownames_to_column(as.data.frame(g8.coefs.all.hc.se), "variable")
 g8.OLS.elastIDs <- (do.call("rbind",g8.OLS.elastID))
 g8.coefs.all.hc.se.ID <- cbind(g8.OLS.elastIDs,g8.coefs.all.hc.se)
 g8.coefs.all.hc.se.ID <- as.data.frame(g8.coefs.all.hc.se.ID)
 
-write.csv(g8.coefs.all.clust.se.ID, "g8.coefs.WLS.csv")
-write.csv(g8.coefs.all.LME.ID, "g8.coefs.LME.csv")
-write.csv(g8.coefs.all.hc.se.ID, "g8.coefs.OLS.csv")
+write.csv(g8.coefs.all.clust.se.ID, "../Output/g8.coefs.WLS.csv")
+write.csv(g8.coefs.all.LME.ID, "../Output/g8.coefs.LME.csv")
+write.csv(g8.coefs.all.hc.se.ID, "../Output/g8.coefs.OLS.csv")
 
 ##Store variance inflation factors into a data.frame
 g8.vifs.all.df2 <- data.frame(matrix(unlist(g8.vifEstimated2)))
@@ -1220,10 +1214,10 @@ g8.all_baselinesEstimated$sterror.baseline.max <- ifelse(as.numeric(g8.all_basel
 g8.all_baselinesEstimated$baseline.prodpmax <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$baseline.LME.prodpmax),as.numeric(g8.all_baselinesEstimated$baseline.WLS.prodpmax))
 g8.all_baselinesEstimated$sterror.baseline.prodpmax <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$sterror.baseline.LME.prodpmax),as.numeric(g8.all_baselinesEstimated$clust.sterror.baseline.WLS.prodpmax))
 
-print(g8.all_baselinesEstimated)
-write.csv(g8.all_baselinesEstimated, file = "g8.baselines.csv")
-
+#print(g8.all_baselinesEstimated)
+write.csv(g8.all_baselinesEstimated, file = "../Output/g8.baselines.csv")
 ```
+
 
 3. Metaregression analysis: methods and moderator variables
 ===========================================================  
@@ -1264,7 +1258,7 @@ funnel.plots <- ggplot(g8.obsSel2.df, aes(x=BETA, y=PRECISION, label=sprintf("%0
   theme(legend.text=element_text(size=10), legend.title=element_blank(), legend.key=element_blank(), legend.position="right") +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
 funnel.plots 
-ggsave("funnel.plots.png", width=6.5, height=4.5, units="in", dpi=600)
+ggsave("../Output/funnel.plots.png", width=6.5, height=4.5, units="in", dpi=600)
 
 pub.bias.test <- do.call("rbind", g8.pubbias.test)
 pub.bias.test <- rename(pub.bias.test, Type_Sector=`rep(g8.subsetString2, 2)`)
@@ -1339,7 +1333,7 @@ Continuous variables (except VARIANCE) are centered around the average value wit
 4. Results from metaregression analysis
 =======================================
 
-```{r out.table.lrt, echo = FALSE, warning = FALSE, message = FALSE, comment = NA}
+```{r out.table.lrt, eval = FALSE, echo = FALSE, warning = FALSE, message = FALSE, comment = NA}
 LRT.table <- matrix(NA, 8, 6)
 for (i in 1:length(g8.LRT)){
 LRT.table[i,1] <- Type_Sector[i]  
@@ -1498,6 +1492,7 @@ g8.all_baselinesEstimated.2 <- g8.all_baselinesEstimated.2[,c(9,2:8)]
 kable(g8.all_baselinesEstimated.2, digits = 3)
 
 ```
+
 ```{r g8.elast_20000, eval=TRUE, include = FALSE}
 #Read IEO 2016 data on petroleum consumption by end-use and fuel to compute transportation and non-transportation weights
 # g8.worldelastw <- read_excel("auxiliary_inputs_20170829.xlsx", sheet = "cons.weights_IEO2016", col_names = TRUE, skip=4)
@@ -1520,7 +1515,7 @@ kable(g8.all_baselinesEstimated.2, digits = 3)
 # g8.worldelastw2 <- spread(g8.worldelastw2, YEAR, VALUE)
 
 ## These weights combine regional weights from AEO2014 with sectoral weights from IEO2013.
-g8.worldelastw <- read_excel("auxiliary_inputs_20170829.xlsx", sheet = "cons.weights_IEO2013", col_names = TRUE)
+g8.worldelastw <- read_excel("../Data/auxiliary_inputs_20170829.xlsx", sheet = "cons.weights_IEO2013", col_names = TRUE)
 g8.worldelastw <- as.data.frame(g8.worldelastw)
 g8.worldelastw2 <- gather(g8.worldelastw, Year, VALUE, -Region, -Sector)
 g8.worldelastw$RegSect <- paste(g8.worldelastw$Region, g8.worldelastw$Sector, sep = "_")
@@ -1591,7 +1586,7 @@ g8.out_summary5 <- g8.out_summary3 %>%
 g8.out_summary5 <- g8.out_summary5[,c(22,21,3:17)]
 g8.out_summary5 <- dplyr::rename(g8.out_summary5, LR_est.baseline = LR_baseline, LR_baseline.sd = LR_sterror.baseline, LR_lengthrun.yrs = LR_mean.SPEEDYRS,
                                       SR_est.baseline = SR_baseline, SR_baseline.sd = SR_sterror.baseline, SR_lengthrun.yrs = SR_mean.SPEEDYRS)
-write.csv(g8.out_summary5, "g8.elast_line_coeffs.csv")
+write.csv(g8.out_summary5, "../Output/g8.elast_line_coeffs.csv")
 
 # Simulate confidence intervals for all the baseline world oil elasticities resulting from the preferred (WLS or LME) model estimations. Alternatively, we could construct confidence intervals based on either of the two estimations choosing the appropriate columns for elasticiy baseline and standard error from the g8.all_baselinesEstimated table
 g8.intercept = list()
@@ -1631,7 +1626,7 @@ rownames(g8.elast.sim_out) = c("Type", "Region", "Sector", "BaselineType","Mean_
 
 # Export simulated price elasticities for use in BenEStock into .csv
 #write.csv(g8.elast.sim_out[,1:nrow(g8.out_summary3)], "g8.sim_DDElasts_Out.csv")
-write.csv(g8.elast.sim_out[,c(1:4,7:10)], "g8.sim_DDElasts_Out.csv")
+write.csv(g8.elast.sim_out[,c(1:4,7:10)], "../Output/g8.sim_DDElasts_Out.csv")
 ```
 
 ```{r g8.worldelasts, eval=TRUE, include = FALSE}
@@ -2027,6 +2022,7 @@ g8.world.elast.y.plot
 require(gridExtra)
 g8.world.elast.plot <- grid.arrange(g8.world.elast.p.plot, g8.world.elast.y.plot, ncol=2)
 ```
+
 ```{r g8.IncomeEffects, eval = TRUE, include = FALSE}
 # Incorporating income effects into the price elasticity estimate (using a GDP price elasticity of -2.325% , which is the average coming out of the ORNL GDP elasticity meta-analysis. I put it together based on Dave's email from 2014/10/22)
 # For each draw, compute weighted averages to obtain the predicted baseline world elasticities 
@@ -2516,7 +2512,7 @@ g8.world.elastp.plot.withY <- ggplot(g8.worldelast.p.withY.2017, aes(x=BaselineT
                   #ylim(-0.35, 0.05) +
                   #scale_x_continuous(limits = c(2010, 2040), breaks = pretty_breaks(n = 8)) 
 g8.world.elastp.plot.withY
-ggsave("g8.world.elastp.plot.withY.png", width=6.5, height=4.5, units="in", dpi=600)
+ggsave("../Output/g8.world.elastp.plot.withY.png", width=6.5, height=4.5, units="in", dpi=600)
 
 ```
 
@@ -2600,7 +2596,7 @@ world.elast.compare.plot <- ggplot(world.elasts.with.ORNLmetareg[world.elasts.wi
   theme(legend.text=element_text(size=10), legend.title=element_text(size=10, face = "bold"), legend.key=element_blank(), legend.position = "right") +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
 world.elast.compare.plot
-ggsave("world.elast.compare.plot.png", width=6.5, height=4.5, units="in", dpi=600)
+ggsave("../Output/world.elast.compare.plot.png", width=6.5, height=4.5, units="in", dpi=600)
 ```
 
 4.2. Comparison to other world elasticity estimates

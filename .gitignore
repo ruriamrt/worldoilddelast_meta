@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 Output/
+oildd_elast_metaanalysis_Stage1_20181120_Manuscript_files/
+*.tex
+*.spl
