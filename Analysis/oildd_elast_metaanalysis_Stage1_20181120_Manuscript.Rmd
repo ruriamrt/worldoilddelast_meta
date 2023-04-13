@@ -3,7 +3,7 @@ title: Using Meta-Analysis to Estimate World Oil Demand Elasticity
 author:
   - name: Rocio Uria-Martinez
     email: uriamartiner@ornl.gov
-    affiliation: Oak Ridge National Laboratory
+    institute: Oak Ridge National Laboratory
     footnote: Corresponding Author
   - name: Paul N. Leiby
     email: leibypn@ornl.gov
@@ -48,26 +48,23 @@ Chunk 7 [Inactive]: g16.MetaAnalysisMeans (computes unweighted, fixed effect and
 Chunk 8: g8.MetaAnalysisMeans (computes unweighted, fixed effect and random effects means for each elasticity grouping)
 Chunk 9: out_forestplot
 Chunk 10: CreateVars  (adds columns to allelast dataframe that are needed to construct the moderator variables to be used in metaregressions)
-Chunk 11 [Inactive]: g16.Metareg (metaregression analysis: WLS and LME specifications; diagnostic tests)
-Chunk 12 [Inactive]: g16.Results.Summary (collects baseline elasticities, standard errors, and other model attributes of interest into a summary table)
-Chunk 13 [Inactive]: g16.world_elast (constructs oil demand world price-elasticity as weighted average of the various regions and sectors)
-Chunk 14 [Inactive]: g16.IncomeEffects (incorporates income effects to the oil demand price-elasticity)
-Chunk 15: g8.Metareg  (metaregression analysis: WLS and LME specifications; diagnostic tests)
-Chunk 16: outFunnelPlots
-Chunk 17: out.Tables_PSRTransp
-Chunk 18: out.Tables_PSROther
-Chunk 19: out.Tables_PLRTransp
-Chunk 20: out.Tables_PLROther
-Chunk 21: out.Tables_YSRTransp
-Chunk 22: out.Tables_YSROther
-Chunk 23: out.Tables_YLRTransp
-Chunk 24: out.Tables_YLROther
-Chunk 25: out.tbl.baselines
-Chunk 26: g8.world_elast (constructs oil demand world price-elasticity as weighted average of the various sectors)
-Chunk 27: g8.IncomeEffects (incorporates income effects to the oil demand price-elasticity)
-Chunk 28: outworldelastplot
-Chunk 29: WorldElast.compare (comparison plot between short-run world oil demand price elasticity from metaregressions and other published estimates)
-Chunk 30: out_elastcompare
+Chunk 11: g8.Metareg  (metaregression analysis: WLS and LME specifications; diagnostic tests)
+Chunk 12: outFunnelPlots
+Chunk 13: out.Tables_LRT
+Chunk 14: out.Tables_PSRTransp
+Chunk 15: out.Tables_PSROther
+Chunk 16: out.Tables_PLRTransp
+Chunk 17: out.Tables_PLROther
+Chunk 18: out.Tables_YSRTransp
+Chunk 19: out.Tables_YSROther
+Chunk 20: out.Tables_YLRTransp
+Chunk 21: out.Tables_YLROther
+Chunk 22: out.tbl.baselines
+Chunk 23: g8.world_elast (constructs oil demand world price-elasticity as weighted average of the various sectors)
+Chunk 24: g8.IncomeEffects (incorporates income effects to the oil demand price-elasticity)
+Chunk 25: outworldelastplot
+Chunk 26: WorldElast.compare (comparison plot between short-run world oil demand price elasticity from metaregressions and other published estimates)
+Chunk 27: out_elastcompare
 -->
 
 
@@ -140,10 +137,13 @@ allelast$REFERENCE[allelast$REFERENCE == "GundimedaK\xf6hlin2008"] <- "Gundimeda
 allelast <- subset(allelast, STUDY_YR > 1999 & abs(BETA) < 5)
 rownames(allelast) <- seq_len( nrow(allelast))  #reset row.names so that it matches the current length of the allelast dataframe
 
-#Drop observations for which the relevant cross section variables (PRICE.1998 for price elasts or rgdpecap.1998 for income elasts) are NAs
-allelast$RoadTransp = ifelse(allelast$PROD_SECT == "Gasoline" |allelast$PROD_SECT == "Diesel" |allelast$PROD_SECT == "Transportation",1,0) 
-allelast$OtherSector = ifelse(allelast$PROD_SECT != "Total_oil" & allelast$RoadTransp != 1, 1, 0)
+allelast <- allelast %>%
+  mutate(RoadTransp = ifelse(PROD_SECT %in% c("Gasoline", "Diesel", "Transportation"), 1, 0),
+         OtherSector = ifelse(PROD_SECT != "Total_oil" & RoadTransp != 1, 1, 0),
+         OECD = ifelse(REG %in% c("US", "OECD"), 1, 0),
+         nonOECD = ifelse(REG != "US" & REG != "OECD" & REG!= "World", 1, 0)) 
 
+#Drop observations for which the relevant cross section variables (PRICE.1998 for price elasts or rgdpecap.1998 for income elasts) are NAs
 allelast.P.NA <- subset(allelast, TYPE == "P" & RoadTransp == "1" & is.na(PRICE.1998))
 allelast.GDP.NA <- subset(allelast, TYPE == "Y" & REGION != "World" & is.na(rgdpe_cap.1998))
   
@@ -152,8 +152,6 @@ allelast <- allelast[!rownames(allelast) %in% rownames(allelast.P.NA) &
 rownames(allelast) <- seq_len( nrow(allelast))
   
 #Construct separate data.frame for estimates that will not be used in the metaregression analysis because they cannot be allocated to OECD-nonOECD regions or Transportation-nonTransportation sectors (most of these are world elasticity estimates) and remove those rows from allelast dataframe
-allelast$OECD <- ifelse(allelast$REG == "US"|allelast$REG == "OECD",1,0)
-allelast$nonOECD <- ifelse(allelast$REG != "US" & allelast$REG != "OECD" & allelast$REG != "World", 1,0)
 
 allelast.metareg <- subset(allelast, OECD =="1" & RoadTransp =="1"| OECD =="1" & OtherSector == "1"|
                                      nonOECD =="1" & RoadTransp == "1"| nonOECD =="1" & OtherSector == "1")
@@ -215,9 +213,11 @@ paper.periods <-
   theme(plot.title=element_text(size=12, face="bold", hjust = 0.5)) +
   theme(axis.text.x=element_text(size=10, angle=65, hjust=1),axis.text.y=element_text(size=10), axis.title=element_text(size=10,face="bold")) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
-paper.periods 
+paper.periods
+
 ggsave("../Output/paper.periods.png", width=6.5, height=4.5, units="in", dpi=600)
 ```
+
 ```{r out_paperperiods, echo = FALSE, warning =FALSE, message=FALSE }
 paper.periods
 ```
@@ -238,7 +238,7 @@ As an initial exploratory step, Figure 2 displays unweighted means alongside the
 #Compute unweighted mean and fixed and random means for the 16 subsets of observations for which metaregressions will be conducted
 # Create a variable that combines the attributes by which we choose to segment the dataset elasticity type, length of run, and regional attributes
 allelast <- mutate(allelast, Type_Sector = as.factor(paste(TYPE_LENGTH2, RoadTransp, OtherSector, sep = "_")))
-#allelast <- subset(allelast, CALC_STERROR =="0")
+
 
 #Unweighted, fixed effect, and random effects means for each of the subset of elasticities to be used in the metaregressions
 #-----------------------------------------------------------------------------------------------------------------------------
@@ -281,9 +281,12 @@ g8.interstudy_var <- allelast %>%
 ### Assign appropriate between-estimates variance to each observation
 for(i in levels(allelast$Type_Sector))
     {allelast$g8.tau[allelast$Type_Sector == i] = g8.interstudy_var$tau[g8.interstudy_var$Type_Sector == i]}
+
 ### Compute random effects weights
-allelast$g8.weights.RE <- 1/((allelast$ST_ERROR)**2 + allelast$g8.tau)
-allelast$g8.tau.frac <- allelast$g8.tau/allelast$g8.weights.RE
+allelast <- allelast %>%
+  mutate(g8.weights.RE = 1/(ST_ERROR**2 + g8.tau),
+         g8.tau.frac = g8.tau/g8.weights.RE)
+
 ### Compute random effects means and associated 95% confidence intervals
 g8.RE_avg_ALL <- allelast %>% 
   group_by(Type_Sector) %>% 
@@ -300,22 +303,26 @@ g8.RE_avg_ALL$Type <- "Random Effects Means"
 
 
 #Combine raw, fixed effect and random effects means and standard errors into a single data.frame
-g8.avg.summary <- rbind(g8.FE_avg_ALL, g8.RE_avg_ALL[,c("Type_Sector","Type","numerator","denominator","mean","se","n.obs","lo.CI95","up.CI95")])
-g8.avg.summary <- g8.avg.summary[,c("Type_Sector","Type","n.obs", "mean", "se", "lo.CI95", "up.CI95")]
+g8.avg.summary <- rbind(g8.FE_avg_ALL, g8.RE_avg_ALL[,c("Type_Sector","Type","numerator","denominator","mean","se","n.obs","lo.CI95","up.CI95")]) %>%
+  select(Type_Sector, Type, n.obs, mean, se, lo.CI95, up.CI95)
+
 
 Type_Sector <- c("P_SR_1_0", "P_SR_0_1", "P_LR_1_0", "P_LR_0_1", "Y_SR_1_0", "Y_SR_0_1", "Y_LR_1_0", "Y_LR_0_1")
 g8.ElastID <- c("ShortRun-\nTransportation", "ShortRun-\nnonTransportation", "LongRun-\nTransportation", "LongRun-\nnonTransportation",
              "ShortRun-\nTransportation", "ShortRun-\nnonTransportation", "LongRun-\nTransportation", "LongRun-\nnonTransportation")
 g8.ElastIDmatch <- data.frame(Type_Sector, g8.ElastID)
-g8.avg.summary <- merge(g8.avg.summary, g8.ElastIDmatch, by=c("Type_Sector"))
-g8.avg.summary <- merge(g8.avg.summary, g8.avg_ALL[,c("Type_Sector","unweighted_mean")], by=c("Type_Sector"))
-g8.avg.summary$g8.ElastID <- as.factor(g8.avg.summary$g8.ElastID)
 
+
+g8.avg.summary <- g8.avg.summary %>%
+  left_join(g8.ElastIDmatch, by = c("Type_Sector")) %>%
+  left_join(g8.avg_ALL[,c("Type_Sector","unweighted_mean")], by=c("Type_Sector")) %>%
+  mutate(g8.ElastID = as.factor(g8.ElastID),
+         Length_Run = as.factor(substr(Type_Sector, 3,4)),
+         Elast_Type = ifelse(substr(Type_Sector, 1,1) == "P", "Price", "Income")) 
+  
 print(g8.avg.summary)
 
 #Forest plots
-g8.avg.summary$Length_Run <- as.factor(substr(g8.avg.summary$Type_Sector, 3,4))
-g8.avg.summary$Elast_Type <- ifelse(substr(g8.avg.summary$Type_Sector, 1,1) =="P", "Price", "Income")
 
 g8.forest.plot <- 
   ggplot(g8.avg.summary,aes(x=mean,y=g8.ElastID))+
@@ -343,9 +350,6 @@ elastsubset <- subset(allelast, TYPE_LENGTH2 == "Y_LR" & RoadTransp == "0")
 elastsubset.plot <- ggplot(elastsubset, aes(x=BETA, y=ST_ERROR, color= as.factor(CALC_STERROR))) + 
   geom_point(size = 1) +
   ylim(0,1)+
-#  facet_wrap(~Metric, ncol = 1) +
-#  scale_color_manual(values = c("red","black","blue","orange","turquoise")) + 
-#  scale_shape_manual(values = shape.set11) + 
   labs(x="Elasticity", y="Variance", title="") +  
   theme(strip.text.x = element_text(size = 12)) + 
   theme(plot.title=element_text(size=12, face="bold", hjust=0.5)) +
@@ -368,7 +372,9 @@ All weighted and unweighted means are less than one in absolute value (i.e., ine
 
 ```{r CreateVars, eval = TRUE, include=FALSE}
 ##Brent price source: http://www.eia.gov/dnav/pet/pet_pri_spt_s1_a.htm
-Brentp.1998 = 12.76/159  #Average crude oil price for 1998 (in $/liter)
+literspergal <- 3.78
+galsperbbl <- 42
+Brentp.1998 = 12.76/(literspergal * galsperbbl)  #Average crude oil price for 1998 (in $/liter)
 
 allelast <- mutate(allelast, 
            Ones = 1, #(to be used for inspecting correlation across explanatory variables)
@@ -432,7 +438,7 @@ allelast <- mutate(allelast,
 )
 
 
-##Centering continuous variables to avoid extremely large estimated intercepts and to give the estimated intercept a meaningful interpretation.
+##Centering continuous variables to avoid very large estimated intercepts and to give the estimated intercept a meaningful interpretation.
 for(i in 1: nrow(allelast)){
 ##YrAvg
 allelast$YrAvg.avg[i] <-  mean(allelast$AVGYR
@@ -539,15 +545,14 @@ for (i in 1:nrow(g8.selectorSets)) {
 
 
 #Select moderator variable sets
-Specification = 7
-    all_varList_P_SR.Transp =    c("g8.YrAvg.cent","Quarterly","Monthly","CSTS","Pmax","OECD","StaticP","StaticP.CS","PRICE.1998.cent","DslTransp","VehStk","VARIANCE","CALC_STERROR")
-    all_varList_P_LR.Transp =    c("g8.YrAvg.cent","g8.SPEEDYRS.cent","CS","CSTS","Pmax","OECD","StaticP","PRICE.1998.cent","DslTransp","VehStk","VARIANCE","CALC_STERROR")
-    all_varList_P_SR.nonTransp = c("g8.YrAvg.cent","Quarterly","Monthly","CSTS","OECD","Pmax","StaticP","StaticP.CS","EndUserP","FuelSwitch","VARIANCE","CALC_STERROR")
-    all_varList_P_LR.nonTransp = c("g8.YrAvg.cent","g8.SPEEDYRS.cent","CSTS","OECD","Pmax","EndUserP","VARIANCE","CALC_STERROR")
-    all_varList_Y_SR.Transp =    c("g8.YrAvg.cent","Monthly","CSTS","Ymax","StaticY","StaticY.CS","g8.rgdpe_cap.1998.cent","DslTransp","VehStk","VARIANCE","CALC_STERROR")
-    all_varList_Y_LR.Transp =    c("g8.YrAvg.cent","g8.SPEEDYRS.cent","CSTS","Ymax","g8.rgdpe_cap.1998.cent","DslTransp","VehStk","VARIANCE","CALC_STERROR")
-    all_varList_Y_SR.nonTransp = c("g8.YrAvg.cent","Quarterly","Monthly","CSTS","Ymax","StaticY","StaticY.CS","g8.rgdpe_cap.1998.cent","FuelSwitch","VARIANCE","CALC_STERROR")
-    all_varList_Y_LR.nonTransp = c("g8.YrAvg.cent","g8.SPEEDYRS.cent","CSTS","Ymax","g8.rgdpe_cap.1998.cent","CALC_STERROR")
+all_varList_P_SR.Transp =    c("g8.YrAvg.cent","Quarterly","Monthly","CSTS","Pmax","OECD","StaticP","StaticP.CS","PRICE.1998.cent","DslTransp","VehStk","VARIANCE","CALC_STERROR")
+all_varList_P_LR.Transp =    c("g8.YrAvg.cent","g8.SPEEDYRS.cent","CS","CSTS","Pmax","OECD","StaticP","PRICE.1998.cent","DslTransp","VehStk","VARIANCE","CALC_STERROR")
+all_varList_P_SR.nonTransp = c("g8.YrAvg.cent","Quarterly","Monthly","CSTS","OECD","Pmax","StaticP","StaticP.CS","EndUserP","FuelSwitch","VARIANCE","CALC_STERROR")
+all_varList_P_LR.nonTransp = c("g8.YrAvg.cent","g8.SPEEDYRS.cent","CSTS","OECD","Pmax","EndUserP","VARIANCE","CALC_STERROR")
+all_varList_Y_SR.Transp =    c("g8.YrAvg.cent","Monthly","CSTS","Ymax","StaticY","StaticY.CS","g8.rgdpe_cap.1998.cent","DslTransp","VehStk","VARIANCE","CALC_STERROR")
+all_varList_Y_LR.Transp =    c("g8.YrAvg.cent","g8.SPEEDYRS.cent","CSTS","Ymax","g8.rgdpe_cap.1998.cent","DslTransp","VehStk","VARIANCE","CALC_STERROR")
+all_varList_Y_SR.nonTransp = c("g8.YrAvg.cent","Quarterly","Monthly","CSTS","Ymax","StaticY","StaticY.CS","g8.rgdpe_cap.1998.cent","FuelSwitch","VARIANCE","CALC_STERROR")
+all_varList_Y_LR.nonTransp = c("g8.YrAvg.cent","g8.SPEEDYRS.cent","CSTS","Ymax","g8.rgdpe_cap.1998.cent","CALC_STERROR")
     
 #Create lists to store elements/results of interest from each metaregression
 
@@ -597,14 +602,14 @@ for (i in 1:nrow(g8.selectorSets)) {
   #for (i in 1:1) {
   print(i)
  
-  g8.curr_varList = ifelse(substr(g8.selectorSets[i,1], 1, 4)=="P_SR" & g8.selectorSets[i,2] == "1" & g8.selectorSets[i,3] == "0", list(all_varList_P_SR.Transp),
-                     ifelse(substr(g8.selectorSets[i,1], 1, 4)=="P_SR" & g8.selectorSets[i,2] == "0" & g8.selectorSets[i,3] == "1", list(all_varList_P_SR.nonTransp),
-                      ifelse(substr(g8.selectorSets[i,1], 1, 4)=="P_LR" & g8.selectorSets[i,2] == "1" & g8.selectorSets[i,3] == "0", list(all_varList_P_LR.Transp),
-                       ifelse(substr(g8.selectorSets[i,1], 1, 4)=="P_LR" & g8.selectorSets[i,2] == "0" & g8.selectorSets[i,3] == "1", list(all_varList_P_LR.nonTransp),
-                        ifelse(substr(g8.selectorSets[i,1], 1, 4)=="Y_SR" & g8.selectorSets[i,2] == "1" & g8.selectorSets[i,3] == "0", list(all_varList_Y_SR.Transp),
-                         ifelse(substr(g8.selectorSets[i,1], 1, 4)=="Y_SR" & g8.selectorSets[i,2] == "0" & g8.selectorSets[i,3] == "1", list(all_varList_Y_SR.nonTransp),
-                          ifelse(substr(g8.selectorSets[i,1], 1, 4)=="Y_LR" & g8.selectorSets[i,2] == "1" & g8.selectorSets[i,3] == "0", list(all_varList_Y_LR.Transp),
-                           ifelse(substr(g8.selectorSets[i,1], 1, 4)=="Y_LR" & g8.selectorSets[i,2] == "0" & g8.selectorSets[i,3] == "1", list(all_varList_Y_LR.nonTransp), NA
+  g8.curr_varList = ifelse(g8.selectorSets[i,1] == "P_SR" & g8.selectorSets[i,2] == "1" & g8.selectorSets[i,3] == "0", list(all_varList_P_SR.Transp),
+                     ifelse(g8.selectorSets[i,1] =="P_SR" & g8.selectorSets[i,2] == "0" & g8.selectorSets[i,3] == "1", list(all_varList_P_SR.nonTransp),
+                      ifelse(g8.selectorSets[i,1] =="P_LR" & g8.selectorSets[i,2] == "1" & g8.selectorSets[i,3] == "0", list(all_varList_P_LR.Transp),
+                       ifelse(g8.selectorSets[i,1] =="P_LR" & g8.selectorSets[i,2] == "0" & g8.selectorSets[i,3] == "1", list(all_varList_P_LR.nonTransp),
+                        ifelse(g8.selectorSets[i,1] =="Y_SR" & g8.selectorSets[i,2] == "1" & g8.selectorSets[i,3] == "0", list(all_varList_Y_SR.Transp),
+                         ifelse(g8.selectorSets[i,1] =="Y_SR" & g8.selectorSets[i,2] == "0" & g8.selectorSets[i,3] == "1", list(all_varList_Y_SR.nonTransp),
+                          ifelse(g8.selectorSets[i,1] =="Y_LR" & g8.selectorSets[i,2] == "1" & g8.selectorSets[i,3] == "0", list(all_varList_Y_LR.Transp),
+                           ifelse(g8.selectorSets[i,1] =="Y_LR" & g8.selectorSets[i,2] == "0" & g8.selectorSets[i,3] == "1", list(all_varList_Y_LR.nonTransp), NA
                      ))))))))
                        
                          
@@ -627,8 +632,10 @@ for (i in 1:nrow(g8.selectorSets)) {
   
   g8.curr_formula = paste("BETA",paste(g8.curr_varList, collapse="+"),sep="~") 
   printf("Formula estimated: %s",g8.curr_formula)
+  
   g8.curr_formula.lme = paste(paste("BETA",paste(g8.curr_varList, collapse="+"),sep="~"),"(1|REFERENCE)", sep = "+")
   print(summary(allelast[g8.curr_obsSel,c("BETA",g8.curr_varList)])) # review dataset for this regression
+  
   g8.curr_formula.ols = paste("BETA",paste(g8.curr_varList[g8.curr_varList != "VARIANCE" & g8.curr_varList != "CALC_STERROR"], collapse="+"),sep="~")
   
   g8.curr_cor = round(cor(allelast[g8.curr_obsSel,c("BETA","Ones", g8.curr_varList)], use = "pairwise.complete.obs", method = "spearman"),2)
@@ -658,12 +665,6 @@ for (i in 1:nrow(g8.selectorSets)) {
   #print coefficient tests using the clustered standard errors
   print(coeftest(g8.curr_model, g8.clust.vcov))
 
-  # Plot residuals
-  #plot(g8.curr_model$residuals)
-  # Plot observed values versus fitted values
-  #plot(subset(allelast, g8.curr_obsSel)$BETA, g8.curr_model$fitted.values)
-  #abline(0,1)
-  
   ## Compute intraclass correlation coefficient of the residuals
     g8.curr_resid.by.REF <- cbind(g8.curr_elast.by.REF, g8.curr_model$residuals)
     g8.curr_resid.by.REF$RESIDUAL = g8.curr_resid.by.REF[,3]
@@ -716,13 +717,15 @@ if(length(g8.curr_obsSel2[g8.curr_obsSel2 == "TRUE"]) < length(g8.curr_obsSel[g8
 #Regression of st.error on effect size and dummy variable indicating whether standard error has been obtained directly from the paper or estimated
     g8.currSEbias <- lm(formula = ST_ERROR ~ BETA + CALC_STERROR -1, data = allelast, subset=g8.curr_obsSel2)
     
-    g8.curr_model2 <- lm( formula=g8.curr_formula, data=allelast, 
+    g8.curr_model2 <- lm(formula=g8.curr_formula, data=allelast, 
                               subset=g8.curr_obsSel2,
                               weights = PRECISION )
-         g8.curr_model2.lme <- lmer(formula=g8.curr_formula.lme, data=allelast,
+    
+    g8.curr_model2.lme <- lmer(formula=g8.curr_formula.lme, data=allelast,
                                 subset=g8.curr_obsSel2, 
                                 weights = PRECISION, REML = FALSE)
-          g8.curr_model2.ols <- lm(formula=g8.curr_formula.ols, data=allelast, 
+    
+    g8.curr_model2.ols <- lm(formula=g8.curr_formula.ols, data=allelast, 
                                     subset=g8.curr_obsSel2)
     
     # if needed, re-do analysis dropping vars for which coeff is "NA"
@@ -1022,7 +1025,6 @@ g8.modelsEstimated2.raw[[i]] = g8.curr_model2
 g8.coeffsEstimated2[[i]] = coeftest(g8.curr_model2, g8.clust.vcov.2)
 g8.WLS.elastID[[i]] <- data.frame(ElastID= rep(g8.subsetString2, nrow(g8.coeffsEstimated2[[i]])))
 
-#g8.modelsEstimated2.LME[[i]] = broom.mixed::tidy(g8.curr_model2.lme)
 g8.modelsEstimated2.LME[[i]] = tidy(g8.curr_model2.lme)
 g8.modelsEstimated2.LME.raw[[i]] = g8.curr_model2.lme
 g8.LME.elastID[[i]] <- data.frame(ElastID= rep(g8.subsetString2, nrow(g8.modelsEstimated2.LME[[i]])))
@@ -1163,7 +1165,11 @@ write.csv(g8.coefs.all.hc.se.ID, "../Output/g8.coefs.OLS.csv")
 g8.vifs.all.df2 <- data.frame(matrix(unlist(g8.vifEstimated2)))
 colnames(g8.vifs.all.df2) = "VIF"
 
-g8.all_baselinesEstimated <- as.data.frame(do.call(rbind,g8.baselinesEstimated),stringsAsFactors = FALSE)
+g8.all_baselinesEstimated <- do.call(rbind,g8.baselinesEstimated) %>%
+  as.data.frame %>%
+  mutate_at(c('V1'), as.factor) %>%
+  mutate_if(is.character, as.numeric)
+
 colnames(g8.all_baselinesEstimated) <- c("subsetString","raw.mean","raw.stdev",
                                          "fittedmean.WLS","sigma.WLS","R2adj.WLS",
                                          "baseline.WLS","sterror.baseline.WLS","clust.sterror.baseline.WLS",
@@ -1189,30 +1195,29 @@ colnames(g8.all_baselinesEstimated) <- c("subsetString","raw.mean","raw.stdev",
                                          
                                          "n.obs","unique.obs","n.papers","product.p.obs","mean.SPEEDYRS","mean.SPEEDYRS.OECD","mean.SPEEDYRS.nonOECD","mean.YrAvg","mean.rgdpe1998")
 
-g8.all_baselinesEstimated$subsetString <- as.factor(g8.all_baselinesEstimated$subsetString)
-g8.all_baselinesEstimated$raw.coeffvar <- as.numeric(g8.all_baselinesEstimated$raw.mean)/as.numeric(g8.all_baselinesEstimated$raw.stdev)
-g8.all_baselinesEstimated$WLS.coeffvar <- as.numeric(g8.all_baselinesEstimated$baseline.WLS)/as.numeric(g8.all_baselinesEstimated$clust.sterror.baseline.WLS)
-g8.all_baselinesEstimated$OLS.coeffvar <- as.numeric(g8.all_baselinesEstimated$baseline.OLS)/as.numeric(g8.all_baselinesEstimated$hc.sterror.baseline.OLS)
-g8.all_baselinesEstimated$LME.coeffvar <- as.numeric(g8.all_baselinesEstimated$baseline.LME)/as.numeric(g8.all_baselinesEstimated$sterror.baseline.LME)
+
+g8.all_baselinesEstimated <- g8.all_baselinesEstimated %>%
+  mutate(raw.coeffvar = raw.mean/raw.stdev,
+         WLS.coeffvar = baseline.WLS/clust.sterror.baseline.WLS,
+         OLS.coeffvar = baseline.OLS/hc.sterror.baseline.OLS,
+         LME.coeffvar = baseline.LME/sterror.baseline.LME,
+         )
 
 #For each elasticity grouping, select the baseline to be used for computing world oil demand elasticities out of the three model specifications estimated: WLS with clustered standard errors, OLS with heteroskedasticity-consistent standard errors, or linear mixed effects (LME)
-g8.all_baselinesEstimated$fittedmean <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$fittedmean.LME),as.numeric(g8.all_baselinesEstimated$fittedmean.WLS))
-g8.all_baselinesEstimated$sigma <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$sigma.LME),as.numeric(g8.all_baselinesEstimated$sigma.WLS))
-
-g8.all_baselinesEstimated$baseline <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$baseline.LME),as.numeric(g8.all_baselinesEstimated$baseline.WLS))
-g8.all_baselinesEstimated$sterror.baseline <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$sterror.baseline.LME),as.numeric(g8.all_baselinesEstimated$clust.sterror.baseline.WLS))
-
-g8.all_baselinesEstimated$baseline.OECD <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$baseline.LME.OECD),as.numeric(g8.all_baselinesEstimated$baseline.WLS.OECD))
-g8.all_baselinesEstimated$sterror.baseline.OECD <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$sterror.baseline.LME.OECD),as.numeric(g8.all_baselinesEstimated$clust.sterror.baseline.WLS.OECD))
-
-g8.all_baselinesEstimated$baseline.nonOECD <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$baseline.LME.nonOECD),as.numeric(g8.all_baselinesEstimated$baseline.WLS.nonOECD))
-g8.all_baselinesEstimated$sterror.baseline.nonOECD <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$sterror.baseline.LME.nonOECD),as.numeric(g8.all_baselinesEstimated$clust.sterror.baseline.WLS.nonOECD))
-
-g8.all_baselinesEstimated$baseline.max <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$baseline.LME.max),as.numeric(g8.all_baselinesEstimated$baseline.WLS.max))
-g8.all_baselinesEstimated$sterror.baseline.max <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$sterror.baseline.LME.max),as.numeric(g8.all_baselinesEstimated$clust.sterror.baseline.WLS.max))
-
-g8.all_baselinesEstimated$baseline.prodpmax <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$baseline.LME.prodpmax),as.numeric(g8.all_baselinesEstimated$baseline.WLS.prodpmax))
-g8.all_baselinesEstimated$sterror.baseline.prodpmax <- ifelse(as.numeric(g8.all_baselinesEstimated$LRT_pvalue) < 0.05, as.numeric(g8.all_baselinesEstimated$sterror.baseline.LME.prodpmax),as.numeric(g8.all_baselinesEstimated$clust.sterror.baseline.WLS.prodpmax))
+g8.all_baselinesEstimated <- g8.all_baselinesEstimated %>%
+  mutate(fittedmean = ifelse(LRT_pvalue < 0.05, fittedmean.LME, fittedmean.WLS),
+         sigma = ifelse(LRT_pvalue < 0.05, sigma.LME, sigma.WLS),
+         baseline = ifelse(LRT_pvalue < 0.05, baseline.LME, baseline.WLS),
+         sterror.baseline = ifelse(LRT_pvalue < 0.05, sterror.baseline.LME, clust.sterror.baseline.WLS),
+         baseline.OECD = ifelse(LRT_pvalue < 0.05, baseline.LME.OECD, baseline.WLS.OECD),
+         sterror.baseline.OECD = ifelse(LRT_pvalue < 0.05, sterror.baseline.LME.OECD, clust.sterror.baseline.WLS.OECD),
+         baseline.nonOECD = ifelse(LRT_pvalue < 0.05, baseline.LME.nonOECD, baseline.WLS.nonOECD),
+         sterror.baseline.nonOECD = ifelse(LRT_pvalue < 0.05, sterror.baseline.LME.nonOECD, clust.sterror.baseline.WLS.nonOECD),
+         baseline.max = ifelse(LRT_pvalue < 0.05, baseline.LME.max, baseline.WLS.max),
+         sterror.baseline.max = ifelse(LRT_pvalue < 0.05, sterror.baseline.LME.max, clust.sterror.baseline.WLS.max),
+         baseline.prodpmax = ifelse(LRT_pvalue < 0.05, baseline.LME.prodpmax, baseline.WLS.prodpmax),
+         sterror.baseline.prodpmax = ifelse(LRT_pvalue < 0.05, sterror.baseline.LME.prodpmax, clust.sterror.baseline.WLS.prodpmax)
+         )
 
 #print(g8.all_baselinesEstimated)
 write.csv(g8.all_baselinesEstimated, file = "../Output/g8.baselines.csv")
@@ -1233,8 +1238,6 @@ $$\frac{\beta_i}{se_i} = \frac{\alpha_0}{se_i} + \sum_{k=1}^K \alpha_i*\frac{X_{
 Publication bias arises when the sample of published estimates is not a random sample of the full population of estimates. The bias results from researchers being more likely to submit, and journals being more likely to publish, studies finding larger effect sizes and/or estimates conforming to the theoretically expected sign. The panels in Figure 2 are funnel plots showing the relationship between the inverse of the standard error (i.e., precision) on the y-axis and the effect size on the x-axis for each of the 8 elasticity groupings. The more asymmetric a funnel plot is around the most precise estimate, the stronger publication bias there is. Funnel asymmetry tests confirmed statistically significant asymmetry at the 10% confidence level in 7 of the 8 metaregressions. Long-run income elasticities in non-transportation sector is the only grouping for which funnel asymmetry can be rejected at the 10% confidence level. 
 
 ```{r outFunnelPlots, echo = FALSE, warning =FALSE, message=FALSE }
-g8.obsSel2.df <- do.call("rbind", g8.obsSel2)
-g8.obsSel2.df <- mutate(g8.obsSel2.df, Type_Sector = as.factor(paste(TYPE_LENGTH2, RoadTransp, OtherSector, sep = "_")))
 
 g8.ElastID2 <- c("Price \nShortRun-\nTransportation", "Price \nShortRun-\nnonTransportation", "Price \nLongRun-\nTransportation", "Price \nLongRun-\nnonTransportation",
              "Income \nShortRun-\nTransportation", "Income \nShortRun-\nnonTransportation", "Income \nLongRun-\nTransportation", "Income \nLongRun-\nnonTransportation")
@@ -1242,7 +1245,9 @@ g8.ElastIDmatch2 <- data.frame(Type_Sector, g8.ElastID2)
 g8.ElastIDmatch2$g8.ElastID2 <- factor(g8.ElastIDmatch2$g8.ElastID2, levels=c("Price \nShortRun-\nTransportation", "Price \nShortRun-\nnonTransportation", "Price \nLongRun-\nTransportation", "Price \nLongRun-\nnonTransportation",
              "Income \nShortRun-\nTransportation", "Income \nShortRun-\nnonTransportation", "Income \nLongRun-\nTransportation", "Income \nLongRun-\nnonTransportation"))
 
-g8.obsSel2.df <- merge(g8.obsSel2.df, g8.ElastIDmatch2, by="Type_Sector")
+g8.obsSel2.df <- do.call("rbind", g8.obsSel2) %>%
+  mutate(Type_Sector = as.factor(paste(TYPE_LENGTH2, RoadTransp, OtherSector, sep = "_"))) %>%
+  left_join(g8.ElastIDmatch2, by="Type_Sector")
 
 funnel.plots <- ggplot(g8.obsSel2.df, aes(x=BETA, y=PRECISION, label=sprintf("%0.2f", round(BETA, digits = 1)))) + 
   geom_point(size = 1) + 
@@ -1260,14 +1265,14 @@ funnel.plots <- ggplot(g8.obsSel2.df, aes(x=BETA, y=PRECISION, label=sprintf("%0
 funnel.plots 
 ggsave("../Output/funnel.plots.png", width=6.5, height=4.5, units="in", dpi=600)
 
-pub.bias.test <- do.call("rbind", g8.pubbias.test)
-pub.bias.test <- rename(pub.bias.test, Type_Sector=`rep(g8.subsetString2, 2)`)
-pub.bias.test <- merge(g8.ElastIDmatch, pub.bias.test, by="Type_Sector")
-pub.bias.test$Type <- ifelse(substr(pub.bias.test$Type_Sector,1,1) == "P", "Price", "Income") %>% as.factor()
-pub.bias.test$Length.of.Run <- ifelse(grepl("Long",pub.bias.test$g8.ElastID),"Long Run", "Short Run") %>% as.factor()
-pub.bias.test$Sector <- ifelse(grepl("non",pub.bias.test$g8.ElastID),"nonTransportation", "Transportation") %>% as.factor()
-pub.bias.test <- data.frame(lapply(pub.bias.test, function(y) if(is.numeric(y)) round(y, 3) else y))
-pub.bias.test <- pub.bias.test[,c(8:10,3:5,7)]
+pub.bias.test <- do.call("rbind", g8.pubbias.test) %>%
+  rename(Type_Sector = `rep(g8.subsetString2, 2)`) %>%
+  left_join(g8.ElastIDmatch, by = "Type_Sector") %>%
+  mutate(Type = as.factor(ifelse(substr(Type_Sector, 1, 1) == "P", "Price", "Income")),
+         Length.of.Run = as.factor(ifelse(grepl("Long", g8.ElastID) == T, "Long Run", "Short Run")),
+         Sector = as.factor(ifelse(grepl("non", g8.ElastID), "nonTransportation", "Transportation"))) %>%
+  mutate_if(is.numeric, round, 3) %>%
+  select(Type, Length.of.Run, Sector, estimate, std.error, statistic, g8.ElastID)
 
 #kable(pub.bias.test, digits = 3, caption = "Table 1. Results from Funnel Asymmetry Tests")
 ```
@@ -1333,19 +1338,30 @@ Continuous variables (except VARIANCE) are centered around the average value wit
 4. Results from metaregression analysis
 =======================================
 
-```{r out.table.lrt, eval = FALSE, echo = FALSE, warning = FALSE, message = FALSE, comment = NA}
-LRT.table <- matrix(NA, 8, 6)
+**Table 1. Likelihood Ratio Tests Comparing Fit of Linear Mixed Effects and Weighted Least Squares Metaregression Specifications**
+
+```{r out.table.lrt, echo = FALSE, warning = FALSE, message = FALSE, comment = NA}
+LRT.table <- matrix(NA, 8, 7)
 for (i in 1:length(g8.LRT)){
 LRT.table[i,1] <- Type_Sector[i]  
-LRT.table[i,2] <- round(g8.LRT[[i]][1, "LogLik"], 3) #log likelihood of the full model 
-LRT.table[i,3] <- round(g8.LRT[[i]][2, "LogLik"], 3) #log likelihood of the restricted model
-LRT.table[i,4] <- round(g8.LRT[[i]][2, "statistic"], 3) #value of the statistic
-LRT.table[i,5] <- abs(g8.LRT[[i]][2, "df"]) #difference in degrees of freedom
-LRT.table[i,6] <- round(g8.LRT[[i]][2, "p.value"], 3) #p-value of the statistic
+LRT.table[i,2] <- g8.LRT[[i]][1, "LogLik"] #log likelihood of the full model 
+LRT.table[i,3] <- g8.LRT[[i]][2, "LogLik"] #log likelihood of the restricted model
+LRT.table[i,4] <- g8.LRT[[i]][2, "Chisq"] #value of the statistic
+LRT.table[i,5] <- g8.LRT[[i]][2, "Df"] #difference in degrees of freedom
+LRT.table[i,6] <- g8.LRT[[i]][2, "Pr(>Chisq)"] #p-value of the statistic
+LRT.table[i,7] <- g8.all_baselinesEstimated$n.papers[[i]] #number of clusters
 }
 
-LRT.table <- as.data.frame(LRT.table, row.names = FALSE)
-colnames(LRT.table) <- c("Grouping","Log.Lik.MLE", "Log.Lik.WLS", "Statistic", "Degrees.of.Freedom", "p.value")
+LRT.table <- as.data.frame(LRT.table, row.names = FALSE) 
+
+LRT.table <- LRT.table %>%
+  mutate_at((c(2:7)), as.numeric) %>%
+  mutate_at((c(2:6)), round, 3) %>%
+  mutate_at((c(5)), abs)
+  
+colnames(LRT.table) <- c("Grouping","Log.Lik.MLE", "Log.Lik.WLS", "Statistic", "Degrees.of.Freedom", "p.value", "number.clusters")
+
+kable(LRT.table, digits = 3, colnames = c("Log Likelihood LME", "Log Likelihood WLS", "Statistic", "Degrees of Freedom", "p value", "Number of Clusters"))
 ```
 
 
@@ -1357,7 +1373,7 @@ out.tbl.PSR.Transp <- stargazer(g8.modelsEstimated2.raw[[1]], g8.modelsEstimated
                     column.sep.width = "2pt",
                     dep.var.labels.include = FALSE,
                     colnames = TRUE, notes = NULL,
-                    title="Table 1: Results from short-run price elasticity metaregressions (transportation)",
+                    title="Table 2: Results from short-run price elasticity metaregressions (transportation)",
                     align=TRUE, digits =4, multicolumn = FALSE, rownames = FALSE, model.names = FALSE,
                     type="text", model.numbers = FALSE, style="aer")
 
@@ -1373,7 +1389,7 @@ out.tbl.PSR.Other <- stargazer(g8.modelsEstimated2.raw[[5]], g8.modelsEstimated2
                     column.labels = c("WLS cluster-robust.se","LME"),
                     column.sep.width = "2pt",
                     colnames = TRUE, notes = NULL,
-                    title="Table 2: Results from short-run price elasticity metaregressions (non-transportation)",
+                    title="Table 3: Results from short-run price elasticity metaregressions (non-transportation)",
                     align=TRUE, digits =4, multicolumn = FALSE, rownames = FALSE, model.names = FALSE,
                     type="text",model.numbers = FALSE, style="aer")
 
@@ -1387,7 +1403,7 @@ out.tbl.PLR.Transp <- stargazer(g8.modelsEstimated2.raw[[2]], g8.modelsEstimated
                     column.labels = c("WLS cluster-robust.se","LME"),
                     column.sep.width = "2pt",
                     colnames = TRUE, notes = NULL,
-                    title="Table 3: Results from long-run price elasticity metaregressions (transportation)",
+                    title="Table 4: Results from long-run price elasticity metaregressions (transportation)",
                     align=TRUE, digits =4, multicolumn = FALSE, rownames = FALSE, model.names = FALSE,
                     type="text", model.numbers = FALSE, style="aer")
 
@@ -1402,7 +1418,7 @@ out.tbl.PLR.Other <- stargazer(g8.modelsEstimated2.raw[[6]], g8.modelsEstimated2
                     column.labels = c("WLS cluster-robust.se","LME"),
                     column.sep.width = "2pt",
                     colnames = TRUE, notes = NULL,
-                    title="Table 4: Results from long-run price elasticity metaregressions (non-transportation)",
+                    title="Table 5: Results from long-run price elasticity metaregressions (non-transportation)",
                     align=TRUE, digits =4, multicolumn = FALSE, rownames = FALSE, model.names = FALSE,
                     type="text", model.numbers = FALSE, style="aer")
 
@@ -1416,7 +1432,7 @@ out.tbl.YSR.Transp <- stargazer(g8.modelsEstimated2.raw[[3]], g8.modelsEstimated
                     column.labels = c("WLS cluster-robust.se","LME"),
                     column.sep.width = "2pt",
                     colnames = TRUE, notes = NULL,
-                    title="Table 5: Results from short-run income elasticity metaregressions (transportation)",
+                    title="Table 6: Results from short-run income elasticity metaregressions (transportation)",
                     align=TRUE, digits =4, multicolumn = FALSE, rownames = FALSE, model.names = FALSE,
                     type="text", model.numbers = FALSE, style="aer")
 
@@ -1430,7 +1446,7 @@ out.tbl.YSR.Other <- stargazer(g8.modelsEstimated2.raw[[7]], g8.modelsEstimated2
                      column.labels = c("WLS cluster-robust.se","LME"),
                      column.sep.width = "2pt",
                      colnames = TRUE, notes = NULL,
-                     title="Table 6: Results from short-run income elasticity metaregressions (non-transportation)",
+                     title="Table 7: Results from short-run income elasticity metaregressions (non-transportation)",
                      align=TRUE, digits =4, multicolumn = FALSE, rownames = FALSE, model.names = FALSE,
                      type="text", model.numbers = FALSE, style="aer")
 
@@ -1444,7 +1460,7 @@ out.tbl.YLR.Transp <- stargazer(g8.modelsEstimated2.raw[[4]], g8.modelsEstimated
                     column.labels = c("WLS cluster-robust.se","LME"),
                     column.sep.width = "2pt",
                     colnames = TRUE, notes = NULL,
-                    title="Table 7: Results from long-run income elasticity metaregressions (transportation)",
+                    title="Table 8: Results from long-run income elasticity metaregressions (transportation)",
                     align=TRUE, digits =4, multicolumn = FALSE, rownames = FALSE, model.names = FALSE,
                     type="text", model.numbers = FALSE, style="aer")
 
@@ -1458,7 +1474,7 @@ out.tbl.YLR.Other <- stargazer(g8.modelsEstimated2.raw[[8]], g8.modelsEstimated2
                     column.labels = c("WLS cluster-robust.se","LME"),
                     column.sep.width = "2pt",
                     colnames = TRUE, notes = NULL,
-                    title="Table 8: Results from long-run income elasticity metaregressions (non-transportation)",
+                    title="Table 9: Results from long-run income elasticity metaregressions (non-transportation)",
                     align=TRUE, digits =4, multicolumn = FALSE, rownames = FALSE, model.names = FALSE,
                     type="text", model.numbers = FALSE, style="aer")
 
@@ -1473,7 +1489,7 @@ To translate the metaregression results into an estimate of world oil demand ela
 
 \pagebreak
 
-**Table 9. Estimated Elasticities (fitted means and baselines)**
+**Table 10. Estimated Elasticities (fitted means and baselines)**
 
 ```{r out.tbl.baselines, echo=FALSE}
 g8.all_baselinesEstimated.2 <- g8.all_baselinesEstimated[,c("subsetString", "fittedmean", "baseline", "sterror.baseline","baseline.max", "sterror.baseline.max", "baseline.prodpmax", "sterror.baseline.prodpmax")]
@@ -1495,76 +1511,78 @@ kable(g8.all_baselinesEstimated.2, digits = 3)
 
 ```{r g8.elast_20000, eval=TRUE, include = FALSE}
 #Read IEO 2016 data on petroleum consumption by end-use and fuel to compute transportation and non-transportation weights
-# g8.worldelastw <- read_excel("auxiliary_inputs_20170829.xlsx", sheet = "cons.weights_IEO2016", col_names = TRUE, skip=4)
-# g8.worldelastw <- rename(g8.worldelastw, api.key=`api key`)
-# g8.worldelastw <- as.data.frame(g8.worldelastw)
-# 
-# #Only two rows of data are needed corresponding to api.keys 15-IEO2016.26.Reference-d021916a (liquids consumption in transportation sector) and 15-IEO2016.55.Reference-d021916a (total liquids consumption)
-# g8.worldelastw <- subset(g8.worldelastw, api.key =="15-IEO2016.26.Reference-d021916a"|api.key=="15-IEO2016.55.Reference-d021916a")
-# g8.worldelastw <- g8.worldelastw[,c(3,5:35)]
-# g8.worldelastw.l <- gather(g8.worldelastw, YEAR, VALUE, - api.key)
-# g8.worldelastw.l <- spread(g8.worldelastw.l, api.key, VALUE)
-# g8.worldelastw.l$Transportation <- g8.worldelastw.l[,2]/g8.worldelastw.l[,3]
-# g8.worldelastw.l$Nontransportation <- 1- g8.worldelastw.l$Transportation
-# g8.worldelastw.l <- g8.worldelastw.l[,c(1,4,5)] 
-# 
-# g8.avg.transp.weight <- mean(g8.worldelastw.l$Transportation)
-# g8.avg.other.weight <- mean(g8.worldelastw.l$Nontransportation)
-# 
-# g8.worldelastw2 <- gather(g8.worldelastw.l, Sector, VALUE, -YEAR)
-# g8.worldelastw2 <- spread(g8.worldelastw2, YEAR, VALUE)
+#Only two rows of data are needed corresponding to api.keys 15-IEO2016.26.Reference-d021916a (liquids consumption in transportation sector) and 15-IEO2016.55.Reference-d021916a (total liquids consumption)
+# g8.worldelastw <- read_excel("../Data/auxiliary_inputs_20170829.xlsx", sheet = "cons.weights_IEO2016", col_names = TRUE, skip=4) %>%
+#   rename(api.key=`api key`) %>%
+#   filter(api.key =="15-IEO2016.26.Reference-d021916a"|api.key=="15-IEO2016.55.Reference-d021916a") %>%
+#   select(c(3,5:35)) %>%
+#   pivot_longer(cols = c(-api.key), names_to = "YEAR", values_to = "VALUE") %>%
+#   pivot_wider(names_from = "api.key", values_from = "VALUE") %>%
+#   mutate(Transportation = `15-IEO2016.26.Reference-d021916a`/`15-IEO2016.55.Reference-d021916a`,
+#          Nontransportation = 1 - Transportation) %>%
+#   select(YEAR, Transportation, Nontransportation)
+#  
+#  g8.avg.transp.weight <- mean(g8.worldelastw.l$Transportation)
+#  g8.avg.other.weight <- mean(g8.worldelastw.l$Nontransportation)
+#  
+#  g8.worldelastw2 <- g8.worldelastw %>%
+#    pivot_longer(cols = c(-YEAR), names_to = "Sector", values_to = "VALUE") %>%
+#    pivot_wider(names_from = "YEAR", values_from = "VALUE")
+ 
 
 ## These weights combine regional weights from AEO2014 with sectoral weights from IEO2013.
-g8.worldelastw <- read_excel("../Data/auxiliary_inputs_20170829.xlsx", sheet = "cons.weights_IEO2013", col_names = TRUE)
-g8.worldelastw <- as.data.frame(g8.worldelastw)
-g8.worldelastw2 <- gather(g8.worldelastw, Year, VALUE, -Region, -Sector)
-g8.worldelastw$RegSect <- paste(g8.worldelastw$Region, g8.worldelastw$Sector, sep = "_")
+g8.worldelastw <- read_excel("../Data/auxiliary_inputs_20170829.xlsx", sheet = "cons.weights_IEO2013", col_names = TRUE) %>%
+  mutate(RegSect = paste(Region, Sector, sep = "_")) %>%
+  as.data.frame
+
 
 # Compute slope and intercept for lines relating elasticity to length of run
-g8.out_summary <- g8.all_baselinesEstimated[, c("subsetString", "baseline", "sterror.baseline", "mean.SPEEDYRS")]
-g8.out_summary$Region <- "1_1_"
-g8.out_summary$BaselineType <- "crudep"
+g8.out_summary <- g8.all_baselinesEstimated %>%
+  select(subsetString, baseline, sterror.baseline, mean.SPEEDYRS) %>%
+  mutate(Region = "1_1_",
+         BaselineType = "crudep")
 
-g8.out_summary.OECD <- g8.all_baselinesEstimated[, c("subsetString", "baseline.OECD", "sterror.baseline.OECD", "mean.SPEEDYRS.OECD")]
-g8.out_summary.OECD$Region <- "1_0_"
-g8.out_summary.OECD$BaselineType <- "crudep"
-g8.out_summary.OECD <- dplyr::rename(g8.out_summary.OECD, baseline = baseline.OECD, sterror.baseline = sterror.baseline.OECD, mean.SPEEDYRS = mean.SPEEDYRS.OECD)
+g8.out_summary.OECD <- g8.all_baselinesEstimated %>%
+  select(subsetString, baseline.OECD, sterror.baseline.OECD, mean.SPEEDYRS.OECD) %>%
+  mutate(Region = "1_0_",
+         BaselineType = "crudep") %>%
+  rename(baseline = baseline.OECD, sterror.baseline = sterror.baseline.OECD, mean.SPEEDYRS = mean.SPEEDYRS.OECD)
  
-g8.out_summary.nonOECD <- g8.all_baselinesEstimated[, c("subsetString", "baseline.nonOECD", "sterror.baseline.nonOECD", "mean.SPEEDYRS.nonOECD")]
-g8.out_summary.nonOECD$Region <- "0_1_"
-g8.out_summary.nonOECD$BaselineType <- "crudep"
-g8.out_summary.nonOECD <- dplyr::rename(g8.out_summary.nonOECD, baseline = baseline.nonOECD, sterror.baseline = sterror.baseline.nonOECD, mean.SPEEDYRS = mean.SPEEDYRS.nonOECD)
+g8.out_summary.nonOECD <- g8.all_baselinesEstimated %>%
+  select(subsetString, baseline.nonOECD, sterror.baseline.nonOECD, mean.SPEEDYRS.nonOECD) %>%
+  mutate(Region = "0_1_",
+         BaselineType = "crudep") %>%
+  rename(baseline = baseline.nonOECD, sterror.baseline = sterror.baseline.nonOECD, mean.SPEEDYRS = mean.SPEEDYRS.nonOECD)
 
-g8.out_summary.max <- g8.all_baselinesEstimated[, c("subsetString", "baseline.max", "sterror.baseline.max", "mean.SPEEDYRS")]
-g8.out_summary.max$Region <- "1_1_"
-g8.out_summary.max$BaselineType <- "crudepmax"
-g8.out_summary.max <- dplyr::rename(g8.out_summary.max, baseline = baseline.max, sterror.baseline = sterror.baseline.max)
+g8.out_summary.max <- g8.all_baselinesEstimated %>%
+  select(subsetString, baseline.max, sterror.baseline.max, mean.SPEEDYRS) %>%
+  mutate(Region = "1_1_",
+         BaselineType = "crudepmax") %>%
+  rename(baseline = baseline.max, sterror.baseline = sterror.baseline.max)
 
-g8.out_summary.prodpmax <- g8.all_baselinesEstimated[, c("subsetString", "baseline.prodpmax", "sterror.baseline.prodpmax", "mean.SPEEDYRS")]
-g8.out_summary.prodpmax$Region <- "1_1_"
-g8.out_summary.prodpmax$BaselineType <- "prodpmax"
-g8.out_summary.prodpmax <- dplyr::rename(g8.out_summary.prodpmax, baseline = baseline.prodpmax, sterror.baseline = sterror.baseline.prodpmax)
+g8.out_summary.prodpmax <- g8.all_baselinesEstimated %>%
+  select(subsetString, baseline.prodpmax, sterror.baseline.prodpmax, mean.SPEEDYRS) %>%
+  mutate(Region = "1_1_",
+         BaselineType = "prodpmax")%>%
+  rename(baseline = baseline.prodpmax, sterror.baseline = sterror.baseline.prodpmax)
  
  
-g8.out_summary <- rbind(g8.out_summary.OECD, g8.out_summary.nonOECD, g8.out_summary, g8.out_summary.max, g8.out_summary.prodpmax)
-g8.out_summary$run <- as.factor(substr(g8.out_summary$subsetString, 3,4))
-g8.out_summary$case2 <- as.factor(paste0(substr(g8.out_summary$subsetString,1,2), g8.out_summary$Region, substr(g8.out_summary$subsetString,6,8)))
+g8.out_summary1 <- rbind(g8.out_summary, g8.out_summary.OECD, g8.out_summary.nonOECD, g8.out_summary.max, g8.out_summary.prodpmax) %>%
+  mutate(run = as.factor(substr(subsetString, 3, 4)),
+         case2 = as.factor(paste0(substr(subsetString, 1,2), Region, substr(subsetString, 6, 8)))) %>%
+  select(baseline, sterror.baseline, mean.SPEEDYRS, BaselineType, run, case2) 
 
-g8.out_summary <- g8.out_summary[,c("baseline", "sterror.baseline","mean.SPEEDYRS","BaselineType","run","case2")]
-g8.out_summary$mean.SPEEDYRS <- as.numeric(g8.out_summary$mean.SPEEDYRS)
-#g8.out_summary2 <- reshape2::melt(g8.out_summary, id = c("case2", "run", "BaselineType")) 
-g8.out_summary2 <-  g8.out_summary %>%
-  gather(variable, value, -case2, -run, -BaselineType)  %>%
+
+g8.out_summary2 <-  g8.out_summary1 %>%
+  pivot_longer(cols = c(-case2, -run, -BaselineType), names_to = "variable", values_to = "value") %>%
   unite(var.run, run, variable, sep = "_") %>%
-  spread(var.run, value, fill = 0)
-g8.out_summary2$full.label <- paste(g8.out_summary2$case2, g8.out_summary2$BaselineType, sep = "_")
-
-# g8.out_summary2$value <- as.numeric(g8.out_summary2$value)
-# g8.out_summary3 <- reshape2::recast(g8.out_summary2, case2 ~ run + variable)
- 
- #Linear curve parameters and associated standard errors based on error propagation formula http://courses.washington.edu/phys431/propagation_errors_UCh.pdf
-g8.out_summary3 <- mutate(g8.out_summary2, 
-                        slope = (LR_baseline - SR_baseline)/(LR_mean.SPEEDYRS - SR_mean.SPEEDYRS),
+  pivot_wider(names_from = "var.run", values_from = "value") %>%
+  mutate(full.label = paste(case2, BaselineType, sep = "_"))
+  
+  
+#Linear curve parameters and associated standard errors based on error propagation formula http://courses.washington.edu/phys431/propagation_errors_UCh.pdf
+g8.out_summary3 <- g8.out_summary2 %>%
+  mutate(slope = (LR_baseline - SR_baseline)/(LR_mean.SPEEDYRS - SR_mean.SPEEDYRS),
                         intercept = LR_baseline - (slope * LR_mean.SPEEDYRS),
                         slope.sd = (1/(LR_mean.SPEEDYRS - SR_mean.SPEEDYRS)) * sqrt(LR_sterror.baseline**2 + ((-1*SR_sterror.baseline)**2)),
                         intercept.sd = sqrt(SR_sterror.baseline **2 + ((-SR_mean.SPEEDYRS*slope.sd) **2)),
@@ -1572,21 +1590,26 @@ g8.out_summary3 <- mutate(g8.out_summary2,
                         intercept.plus.sd = intercept + 1*intercept.sd,
                         elast = intercept + (slope * 1/12),
                         elast.minus.sd = intercept.minus.sd + (slope * 1/12),
-                        elast.plus.sd = intercept.plus.sd + (slope * 1/12)
-)
-g8.out_summary3$full.label <- NULL
+                        elast.plus.sd = intercept.plus.sd + (slope * 1/12)) %>%
+  select(-full.label)
+                        
 
-g8.out_summary5 <- g8.out_summary3 %>%
-   mutate( type = substr(case2, 1,1),
-           region = ifelse(substr(case2, 3,5) == "0_1", "nonOECD",
+g8.out_summary4 <- g8.out_summary3 %>%
+  mutate(type = substr(case2, 1,1),
+          region = ifelse(substr(case2, 3,5) == "0_1", "nonOECD",
                            ifelse(substr(case2, 3,5) == "1_0","OECD", "world")),
-           sector = ifelse(substr(case2, 7,9) == "0_1", "nontransp", "transp"),
-           baselinetype = BaselineType,
-           case_label = paste(type, region, sector, sep = "_")  )
-g8.out_summary5 <- g8.out_summary5[,c(22,21,3:17)]
-g8.out_summary5 <- dplyr::rename(g8.out_summary5, LR_est.baseline = LR_baseline, LR_baseline.sd = LR_sterror.baseline, LR_lengthrun.yrs = LR_mean.SPEEDYRS,
-                                      SR_est.baseline = SR_baseline, SR_baseline.sd = SR_sterror.baseline, SR_lengthrun.yrs = SR_mean.SPEEDYRS)
-write.csv(g8.out_summary5, "../Output/g8.elast_line_coeffs.csv")
+          sector = ifelse(substr(case2, 7,9) == "0_1", "nontransp", "transp"),
+          baselinetype = BaselineType,
+          case_label = paste(type, region, sector, sep = "_")) %>%
+  select(c(22,21,3:17)) %>%
+  rename(LR_est.baseline = LR_baseline, 
+         LR_baseline.sd = LR_sterror.baseline, 
+         LR_lengthrun.yrs = LR_mean.SPEEDYRS,
+         SR_est.baseline = SR_baseline,
+         SR_baseline.sd = SR_sterror.baseline, 
+         SR_lengthrun.yrs = SR_mean.SPEEDYRS)
+
+write.csv(g8.out_summary4, "../Output/g8.elast_line_coeffs.csv")
 
 # Simulate confidence intervals for all the baseline world oil elasticities resulting from the preferred (WLS or LME) model estimations. Alternatively, we could construct confidence intervals based on either of the two estimations choosing the appropriate columns for elasticiy baseline and standard error from the g8.all_baselinesEstimated table
 g8.intercept = list()
@@ -1598,35 +1621,35 @@ g8.st_error[i] <- g8.out_summary3$intercept.sd[i]
 }
 
 # Set seed and draw 20000 points out of each of the baseline elasticities
+ndraws <- 20000
 set.seed(14)
 
-g8.elast.sim <- matrix(c(0), 20000, nrow(g8.out_summary3))
+g8.elast.sim <- matrix(c(0), ndraws, nrow(g8.out_summary3))
 colnames(g8.elast.sim) = paste(g8.out_summary3$case2, g8.out_summary3$BaselineType, sep = "_")
 
 for(i in 1:length(g8.intercept)){
 #truncated normal distribution
-  g8.elast.sim[,i] <- rtruncnorm(20000, a = as.numeric(g8.intercept[i])- 1 * as.numeric(g8.st_error[i]), b = as.numeric(g8.intercept[i])+ 1* as.numeric(g8.st_error[i]), mean = as.numeric(g8.intercept[i]), sd = as.numeric(g8.st_error[i]))
+  g8.elast.sim[,i] <- rtruncnorm(ndraws, 
+                                 a = as.numeric(g8.intercept[i]) - 1 * as.numeric(g8.st_error[i]), 
+                                 b = as.numeric(g8.intercept[i]) + 1 * as.numeric(g8.st_error[i]),  
+                                 mean = as.numeric(g8.intercept[i]), 
+                                 sd = as.numeric(g8.st_error[i]))
 }
 
 
 #Add rows with more descriptive titles for the simulated elasticities
 g8.elast.sim_out <- as.data.frame(rbind(
-  c("Price", "Price", "Price", "Price", "Price", "Price", "Income", "Income", "Income", "Income", "Income", "Income",
-    "Price", "Price", "Income", "Income","Price", "Price", "Income", "Income"),
-  c("nonOECD", "nonOECD", "OECD", "OECD", "world", "world","nonOECD", "nonOECD", "OECD", "OECD", "world", "world",
-    "world", "world", "world", "world", "world", "world", "world", "world"),
-  c("Non-transportation", "Transportation", "Non-transportation", "Transportation", "Non-transportation", "Transportation", "Non-transportation", "Transportation",
-    "Non-transportation", "Transportation", "Non-transportation", "Transportation", "Non-transportation", "Transportation", "Non-transportation", "Transportation",
-    "Non-transportation", "Transportation", "Non-transportation", "Transportation"),
-  c("crudep", "crudep", "crudep", "crudep", "crudep", "crudep", "crudep", "crudep","crudep","crudep","crudep","crudep",
-    "crudepmax", "crudepmax", "crudepmax", "crudepmax", "prodpmax", "prodpmax", "prodpmax", "prodpmax"),
-                                      g8.out_summary3$slope, g8.out_summary3$intercept, g8.elast.sim))
+  c(rep("Price", 6), rep("Income", 6), rep("Price", 2), rep("Income", 2), rep("Price", 2), rep("Income", 2)),
+  c(rep("nonOECD", 2), rep("OECD", 2), rep("world", 2),rep("nonOECD", 2), rep("OECD", 2), rep("world", 10)),
+  rep(c("Non-transportation", "Transportation"), times = 10),
+  c(rep("crudep",12), rep("crudepmax", 4), rep("prodpmax", 4)),
+    g8.out_summary3$slope, g8.out_summary3$intercept, g8.elast.sim))
+
 rownames(g8.elast.sim_out) = c("Type", "Region", "Sector", "BaselineType","Mean_Slope", "Mean_Intercept", seq(1,nrow(g8.elast.sim),1))
 
 
 # Export simulated price elasticities for use in BenEStock into .csv
-#write.csv(g8.elast.sim_out[,1:nrow(g8.out_summary3)], "g8.sim_DDElasts_Out.csv")
-write.csv(g8.elast.sim_out[,c(1:4,7:10)], "../Output/g8.sim_DDElasts_Out.csv")
+#write.csv(g8.elast.sim_out[,c(1:4,7:10)], "../Output/g8.sim_DDElasts_Out.csv")
 ```
 
 ```{r g8.worldelasts, eval=TRUE, include = FALSE}
@@ -1634,10 +1657,11 @@ write.csv(g8.elast.sim_out[,c(1:4,7:10)], "../Output/g8.sim_DDElasts_Out.csv")
 
 #### SHORT-RUN PRICE ELASTICITIES
 #################################
+nyears <- 31 #2010-2040
 
 ##based on regional-sectoral baselines
-g8.world_P_SR <- matrix(c(0),20000,31) 
-for(i in 1:31){
+g8.world_P_SR <- matrix(c(0),ndraws,nyears) 
+for(i in 1:nyears){
                g8.world_P_SR[,i] = 
                g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)]*
                  (g8.elast.sim[, "P_0_1_0_1_crudep"] + 
@@ -1657,8 +1681,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines
-g8.world_P_SR_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_P_SR_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_P_SR_crudep[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1671,8 +1695,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for crude price maximum
-g8.world_P_SR_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_P_SR_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_P_SR_crudepmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1685,8 +1709,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for product price maximum
-g8.world_P_SR_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_P_SR_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_P_SR_prodpmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1702,8 +1726,8 @@ for(i in 1:31){
 ################################
 
 ##based on regional-sectoral baselines
-g8.world_P_LR <- matrix(c(0),20000,31) 
-for(i in 1:31){
+g8.world_P_LR <- matrix(c(0),ndraws,nyears) 
+for(i in 1:nyears){
                 g8.world_P_LR[,i] = 
                g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)]*
                  (g8.elast.sim[, "P_0_1_0_1_crudep"] + 
@@ -1724,8 +1748,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines
-g8.world_P_LR_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_P_LR_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_P_LR_crudep[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1738,8 +1762,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for crude price maximum
-g8.world_P_LR_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_P_LR_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_P_LR_crudepmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1752,8 +1776,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for product price maximum
-g8.world_P_LR_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_P_LR_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_P_LR_prodpmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1769,8 +1793,8 @@ for(i in 1:31){
 ##################################
 
 ##based on regional-sectoral baselines
-g8.world_Y_SR <- matrix(c(0),20000,31) 
-for(i in 1:31){
+g8.world_Y_SR <- matrix(c(0),ndraws,nyears) 
+for(i in 1:nyears){
                g8.world_Y_SR[,i] = 
                g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)]*
                  (g8.elast.sim[, "Y_0_1_0_1_crudep"] + 
@@ -1790,8 +1814,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines
-g8.world_Y_SR_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_Y_SR_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_Y_SR_crudep[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1804,8 +1828,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for crude price maximum
-g8.world_Y_SR_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_Y_SR_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_Y_SR_crudepmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1818,8 +1842,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for product price maximum
-g8.world_Y_SR_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_Y_SR_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_Y_SR_prodpmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1835,8 +1859,8 @@ for(i in 1:31){
 ##################################
 
 ##based on regional-sectoral baselines
-g8.world_Y_LR <- matrix(c(0),20000,31) 
-for(i in 1:31){
+g8.world_Y_LR <- matrix(c(0),ndraws,nyears) 
+for(i in 1:nyears){
                 g8.world_Y_LR[,i] = 
                g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)]*
                  (g8.elast.sim[, "Y_0_1_0_1_crudep"] + 
@@ -1857,8 +1881,8 @@ for(i in 1:31){
 } 
 
 ##based on sectoral baselines
-g8.world_Y_LR_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_Y_LR_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_Y_LR_crudep[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1871,8 +1895,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for crude price maximum
-g8.world_Y_LR_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_Y_LR_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_Y_LR_crudepmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1885,8 +1909,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for product price maximum
-g8.world_Y_LR_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_Y_LR_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_Y_LR_prodpmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -1922,73 +1946,75 @@ for(i in 1:31){
  g8.est.world_Y_LR_prodpmax <- apply(g8.world_Y_LR_prodpmax, 2, quantile, probs = c(0, 0.5, 1))
  
 ##collect the results in a data frame for plotting in ggplot2
- g8.P_SR_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR[1,], middle = g8.est.world_P_SR[2,], upper = g8.est.world_P_SR[3,])
- g8.P_SR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_crudep[1,], middle = g8.est.world_P_SR_crudep[2,], upper = g8.est.world_P_SR_crudep[3,])
- g8.P_SR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_crudepmax[1,], middle = g8.est.world_P_SR_crudepmax[2,], upper = g8.est.world_P_SR_crudepmax[3,])
- g8.P_SR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_prodpmax[1,], middle = g8.est.world_P_SR_prodpmax[2,], upper = g8.est.world_P_SR_prodpmax[3,])
+ g8.P_SR_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR[1,], middle = g8.est.world_P_SR[2,], upper = g8.est.world_P_SR[3,]) %>%
+   mutate(TypeLength = "Short-Run Price",
+          BaselineType = "crudep_regions")
  
- g8.P_LR_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR[1,], middle = g8.est.world_P_LR[2,], upper = g8.est.world_P_LR[3,])
- g8.P_LR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_crudep[1,], middle = g8.est.world_P_LR_crudep[2,], upper = g8.est.world_P_LR_crudep[3,])
- g8.P_LR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_crudepmax[1,], middle = g8.est.world_P_LR_crudepmax[2,], upper = g8.est.world_P_LR_crudepmax[3,])
- g8.P_LR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_prodpmax[1,], middle = g8.est.world_P_LR_prodpmax[2,], upper = g8.est.world_P_LR_prodpmax[3,])
+ g8.P_SR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_crudep[1,], middle = g8.est.world_P_SR_crudep[2,], upper = g8.est.world_P_SR_crudep[3,]) %>%
+   mutate(TypeLength = "Short-Run Price",
+          BaselineType = "crudep")
  
- g8.Y_SR_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_SR[1,], middle = g8.est.world_Y_SR[2,], upper = g8.est.world_Y_SR[3,])
- g8.Y_SR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_SR_crudep[1,], middle = g8.est.world_Y_SR_crudep[2,], upper = g8.est.world_Y_SR_crudep[3,])
- g8.Y_SR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_SR_crudepmax[1,], middle = g8.est.world_Y_SR_crudepmax[2,], upper = g8.est.world_Y_SR_crudepmax[3,])
- g8.Y_SR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_SR_prodpmax[1,], middle = g8.est.world_Y_SR_prodpmax[2,], upper = g8.est.world_Y_SR_prodpmax[3,])
+ g8.P_SR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_crudepmax[1,], middle = g8.est.world_P_SR_crudepmax[2,], upper = g8.est.world_P_SR_crudepmax[3,]) %>%
+   mutate(TypeLength = "Short-Run Price",
+          BaselineType = "crudepmax")
  
- g8.Y_LR_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_LR[1,], middle = g8.est.world_Y_LR[2,], upper = g8.est.world_Y_LR[3,])
- g8.Y_LR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_LR_crudep[1,], middle = g8.est.world_Y_LR_crudep[2,], upper = g8.est.world_Y_LR_crudep[3,])
- g8.Y_LR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_LR_crudepmax[1,], middle = g8.est.world_Y_LR_crudepmax[2,], upper = g8.est.world_Y_LR_crudepmax[3,])
- g8.Y_LR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_LR_prodpmax[1,], middle = g8.est.world_Y_LR_prodpmax[2,], upper = g8.est.world_Y_LR_prodpmax[3,])
+ g8.P_SR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_prodpmax[1,], middle = g8.est.world_P_SR_prodpmax[2,], upper = g8.est.world_P_SR_prodpmax[3,]) %>%
+   mutate(TypeLength = "Short-Run Price",
+          BaselineType = "prodpmax")
  
+ g8.P_LR_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR[1,], middle = g8.est.world_P_LR[2,], upper = g8.est.world_P_LR[3,]) %>%
+   mutate(TypeLength = "Long-Run Price",
+          BaselineType = "crudep_regions")
  
-g8.P_SR_dat$TypeLength <- "Short-Run Price"
-g8.P_SR_crudep_dat$TypeLength <- "Short-Run Price"
-g8.P_SR_crudepmax_dat$TypeLength <- "Short-Run Price"
-g8.P_SR_prodpmax_dat$TypeLength <- "Short-Run Price"
+ g8.P_LR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_crudep[1,], middle = g8.est.world_P_LR_crudep[2,], upper = g8.est.world_P_LR_crudep[3,]) %>%
+   mutate(TypeLength = "Long-Run Price",
+          BaselineType = "crudep")
+ 
+ g8.P_LR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_crudepmax[1,], middle = g8.est.world_P_LR_crudepmax[2,], upper = g8.est.world_P_LR_crudepmax[3,]) %>%
+   mutate(TypeLength = "Long-Run Price",
+          BaselineType = "crudepmax")
+ 
+ g8.P_LR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_prodpmax[1,], middle = g8.est.world_P_LR_prodpmax[2,], upper = g8.est.world_P_LR_prodpmax[3,]) %>%
+   mutate(TypeLength = "Long-Run Price",
+          BaselineType = "prodpmax")
+ 
+ g8.Y_SR_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_SR[1,], middle = g8.est.world_Y_SR[2,], upper = g8.est.world_Y_SR[3,]) %>%
+   mutate(TypeLength = "Short-Run Income",
+          BaselineType = "crudep_regions")
+ 
+ g8.Y_SR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_SR_crudep[1,], middle = g8.est.world_Y_SR_crudep[2,], upper = g8.est.world_Y_SR_crudep[3,]) %>%
+   mutate(TypeLength = "Short-Run Income",
+          BaselineType = "crudep")
+ 
+ g8.Y_SR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_SR_crudepmax[1,], middle = g8.est.world_Y_SR_crudepmax[2,], upper = g8.est.world_Y_SR_crudepmax[3,]) %>%
+   mutate(TypeLength = "Short-Run Income",
+          BaselineType = "crudepmax")
+ 
+ g8.Y_SR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_SR_prodpmax[1,], middle = g8.est.world_Y_SR_prodpmax[2,], upper = g8.est.world_Y_SR_prodpmax[3,]) %>%
+   mutate(TypeLength = "Short-Run Income",
+          BaselineType = "prodpmax")
+ 
+ g8.Y_LR_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_LR[1,], middle = g8.est.world_Y_LR[2,], upper = g8.est.world_Y_LR[3,]) %>%
+   mutate(TypeLength = "Long-Run Income",
+          BaselineType = "crudep_regions")
+ 
+ g8.Y_LR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_LR_crudep[1,], middle = g8.est.world_Y_LR_crudep[2,], upper = g8.est.world_Y_LR_crudep[3,]) %>%
+   mutate(TypeLength = "Long-Run Income",
+          BaselineType = "crudep")
+ 
+ g8.Y_LR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_LR_crudepmax[1,], middle = g8.est.world_Y_LR_crudepmax[2,], upper = g8.est.world_Y_LR_crudepmax[3,]) %>%
+   mutate(TypeLength = "Long-Run Income",
+          BaselineType = "crudepmax")
+ 
+ g8.Y_LR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_Y_LR_prodpmax[1,], middle = g8.est.world_Y_LR_prodpmax[2,], upper = g8.est.world_Y_LR_prodpmax[3,]) %>%
+   mutate(TypeLength = "Long-Run Income",
+          BaselineType = "prodpmax")
 
-g8.P_SR_dat$BaselineType <- "crudep_regions"
-g8.P_SR_crudep_dat$BaselineType <- "crudep"
-g8.P_SR_crudepmax_dat$BaselineType <- "crudepmax"
-g8.P_SR_prodpmax_dat$BaselineType <- "prodpmax"
+g8.all.worldelast.p <- rbind(g8.P_SR_dat, g8.P_LR_dat, g8.P_SR_crudep_dat, g8.P_LR_crudep_dat, g8.P_SR_crudepmax_dat, g8.P_LR_crudepmax_dat, g8.P_SR_prodpmax_dat, g8.P_LR_prodpmax_dat) %>%
+  mutate_at(c('TypeLength', 'BaselineType'), as.factor)
 
-g8.P_LR_dat$TypeLength <- "Long-Run Price"
-g8.P_LR_crudep_dat$TypeLength <- "Long-Run Price"
-g8.P_LR_crudepmax_dat$TypeLength <- "Long-Run Price"
-g8.P_LR_prodpmax_dat$TypeLength <- "Long-Run Price"
-
-g8.P_LR_dat$BaselineType <- "crudep_regions"
-g8.P_LR_crudep_dat$BaselineType <- "crudep"
-g8.P_LR_crudepmax_dat$BaselineType <- "crudepmax"
-g8.P_LR_prodpmax_dat$BaselineType <- "prodpmax"
-
-g8.Y_SR_dat$TypeLength <- "Short-Run Income"
-g8.Y_SR_crudep_dat$TypeLength <- "Short-Run Income"
-g8.Y_SR_crudepmax_dat$TypeLength <- "Short-Run Income"
-g8.Y_SR_prodpmax_dat$TypeLength <- "Short-Run Income"
-
-g8.Y_SR_dat$BaselineType <- "crudep_regions"
-g8.Y_SR_crudep_dat$BaselineType <- "crudep"
-g8.Y_SR_crudepmax_dat$BaselineType <- "crudepmax"
-g8.Y_SR_prodpmax_dat$BaselineType <- "prodpmax"
-
-g8.Y_LR_dat$TypeLength <- "Long-Run Income"
-g8.Y_LR_crudep_dat$TypeLength <- "Long-Run Income"
-g8.Y_LR_crudepmax_dat$TypeLength <- "Long-Run Income"
-g8.Y_LR_prodpmax_dat$TypeLength <- "Long-Run Income"
-
-g8.Y_LR_dat$BaselineType <- "crudep_regions"
-g8.Y_LR_crudep_dat$BaselineType <- "crudep"
-g8.Y_LR_crudepmax_dat$BaselineType <- "crudepmax"
-g8.Y_LR_prodpmax_dat$BaselineType <- "prodpmax"
-
-
-g8.all.worldelast.p <- rbind(g8.P_SR_dat, g8.P_LR_dat, g8.P_SR_crudep_dat, g8.P_LR_crudep_dat, g8.P_SR_crudepmax_dat, g8.P_LR_crudepmax_dat, g8.P_SR_prodpmax_dat, g8.P_LR_prodpmax_dat)
-g8.all.worldelast.p$TypeLength <- as.factor(g8.all.worldelast.p$TypeLength)
 g8.all.worldelast.p$TypeLength <- factor(g8.all.worldelast.p$TypeLength, levels = c("Short-Run Price", "Long-Run Price"))
-g8.all.worldelast.p$BaselineType <- as.factor(g8.all.worldelast.p$BaselineType)
- 
+
 g8.world.elast.p.plot <- ggplot(g8.all.worldelast.p, aes(x=Year, y=middle, color = BaselineType)) + facet_wrap(~TypeLength) +
                   geom_line(data=g8.all.worldelast.p, color = "black")+
                   geom_ribbon(data=g8.all.worldelast.p, aes(ymin=lower, ymax=upper), alpha = 0.3) +
@@ -1997,15 +2023,14 @@ g8.world.elast.p.plot <- ggplot(g8.all.worldelast.p, aes(x=Year, y=middle, color
                   theme(axis.text.x=element_text(size=12, angle=90, hjust=1),axis.text.y=element_text(size=12), axis.title=element_text(size=12)) +
                   theme(plot.title=element_text(size=16, face="bold"))+
                   #scale_y_continuous(limits = c(-2, 2), breaks = pretty_breaks(n = 12)) +
-                  #ylim(-0.20, 0)+
                   scale_x_continuous(limits = c(2010, 2040), breaks = pretty_breaks(n = 6)) 
 g8.world.elast.p.plot
 
-g8.all.worldelast.y <- rbind(g8.Y_SR_dat, g8.Y_LR_dat, g8.Y_SR_crudep_dat, g8.Y_LR_crudep_dat, g8.Y_SR_crudepmax_dat, g8.Y_LR_crudepmax_dat, g8.Y_SR_prodpmax_dat, g8.Y_LR_prodpmax_dat)
-#g8.all.worldelast.y <- g8.all.worldelast.y[g8.all.worldelast.y$Year <= 2040,]
-g8.all.worldelast.y$TypeLength <- as.factor(g8.all.worldelast.y$TypeLength)
+g8.all.worldelast.y <- rbind(g8.Y_SR_dat, g8.Y_LR_dat, g8.Y_SR_crudep_dat, g8.Y_LR_crudep_dat, g8.Y_SR_crudepmax_dat, g8.Y_LR_crudepmax_dat, g8.Y_SR_prodpmax_dat, g8.Y_LR_prodpmax_dat) %>%
+   mutate_at(c('TypeLength', 'BaselineType'), as.factor)
+
 g8.all.worldelast.y$TypeLength <- factor(g8.all.worldelast.y$TypeLength, levels = c("Short-Run Income", "Long-Run Income"))
-g8.all.worldelast.y$BaselineType <- as.factor(g8.all.worldelast.y$BaselineType)
+
  
 g8.world.elast.y.plot <- ggplot(g8.all.worldelast.y, aes(x=Year, y=middle, color = BaselineType)) + facet_wrap(~TypeLength) +
                   geom_line(data=g8.all.worldelast.y, color = "black")+
@@ -2024,36 +2049,35 @@ g8.world.elast.plot <- grid.arrange(g8.world.elast.p.plot, g8.world.elast.y.plot
 ```
 
 ```{r g8.IncomeEffects, eval = TRUE, include = FALSE}
-# Incorporating income effects into the price elasticity estimate (using a GDP price elasticity of -2.325% , which is the average coming out of the ORNL GDP elasticity meta-analysis. I put it together based on Dave's email from 2014/10/22)
+# Incorporating income effects into the price elasticity estimate (using a GDP price elasticity of -2.325% , which is the average coming out of the ORNL GDP elasticity meta-analysis)
 # For each draw, compute weighted averages to obtain the predicted baseline world elasticities 
 GDPoilelast <- -0.02
 
 ##SHORT_RUN
-g8.world_P_SR_withY <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_P_SR_withY[,i] = g8.world_P_SR[,i] + GDPoilelast * g8.world_Y_SR[,i]}
+g8.world_P_SR_withY <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_P_SR_withY[,i] = g8.world_P_SR[,i] + GDPoilelast * g8.world_Y_SR[,i]}
 
-g8.world_P_SR_withY_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_P_SR_withY_crudep[,i] = g8.world_P_SR_crudep[,i] + GDPoilelast * g8.world_Y_SR_crudep[,i]}
+g8.world_P_SR_withY_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_P_SR_withY_crudep[,i] = g8.world_P_SR_crudep[,i] + GDPoilelast * g8.world_Y_SR_crudep[,i]}
 
-g8.world_P_SR_withY_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_P_SR_withY_crudepmax[,i] = g8.world_P_SR_crudepmax[,i] + GDPoilelast * g8.world_Y_SR_crudepmax[,i]}
+g8.world_P_SR_withY_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_P_SR_withY_crudepmax[,i] = g8.world_P_SR_crudepmax[,i] + GDPoilelast * g8.world_Y_SR_crudepmax[,i]}
 
-g8.world_P_SR_withY_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_P_SR_withY_prodpmax[,i] = g8.world_P_SR_prodpmax[,i] + GDPoilelast * g8.world_Y_SR_prodpmax[,i]}
+g8.world_P_SR_withY_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_P_SR_withY_prodpmax[,i] = g8.world_P_SR_prodpmax[,i] + GDPoilelast * g8.world_Y_SR_prodpmax[,i]}
 
 ##LONG_RUN
-g8.world_P_LR_withY <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_P_LR_withY[,i] = g8.world_P_LR[,i] + GDPoilelast * g8.world_Y_LR[,i]}
+g8.world_P_LR_withY <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_P_LR_withY[,i] = g8.world_P_LR[,i] + GDPoilelast * g8.world_Y_LR[,i]}
 
-g8.world_P_LR_withY_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_P_LR_withY_crudep[,i] = g8.world_P_LR_crudep[,i] + GDPoilelast * g8.world_Y_LR_crudep[,i]}
+g8.world_P_LR_withY_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_P_LR_withY_crudep[,i] = g8.world_P_LR_crudep[,i] + GDPoilelast * g8.world_Y_LR_crudep[,i]}
 
-g8.world_P_LR_withY_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_P_LR_withY_crudepmax[,i] = g8.world_P_LR_crudepmax[,i] + GDPoilelast * g8.world_Y_LR_crudepmax[,i]}
+g8.world_P_LR_withY_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_P_LR_withY_crudepmax[,i] = g8.world_P_LR_crudepmax[,i] + GDPoilelast * g8.world_Y_LR_crudepmax[,i]}
 
-g8.world_P_LR_withY_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_P_LR_withY_prodpmax[,i] = g8.world_P_LR_prodpmax[,i] + GDPoilelast * g8.world_Y_LR_prodpmax[,i]}
-
+g8.world_P_LR_withY_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_P_LR_withY_prodpmax[,i] = g8.world_P_LR_prodpmax[,i] + GDPoilelast * g8.world_Y_LR_prodpmax[,i]}
 
 
 # Compute the 0%, 50% and 100% quantiles to be plotted for each of the baseline elasticities
@@ -2069,46 +2093,51 @@ g8.est.world_P_LR_withY_prodpmax <- apply(g8.world_P_LR_withY_prodpmax, 2, quant
 
 
 # Collect the results in a data frame for plotting in ggplot2
-g8.P_SR_dat_withY <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_withY[1,], middle = g8.est.world_P_SR_withY[2,], upper = g8.est.world_P_SR_withY[3,])
-g8.P_SR_dat_withY_crudep <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_withY_crudep[1,], middle = g8.est.world_P_SR_withY_crudep[2,], upper = g8.est.world_P_SR_withY_crudep[3,])
-g8.P_SR_dat_withY_crudepmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_withY_crudepmax[1,], middle = g8.est.world_P_SR_withY_crudepmax[2,], upper = g8.est.world_P_SR_withY_crudepmax[3,])
-g8.P_SR_dat_withY_prodpmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_withY_prodpmax[1,], middle = g8.est.world_P_SR_withY_prodpmax[2,], upper = g8.est.world_P_SR_withY_prodpmax[3,])
+g8.P_SR_dat_withY <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_withY[1,], middle = g8.est.world_P_SR_withY[2,], upper = g8.est.world_P_SR_withY[3,]) %>%
+  mutate(TypeLength = "SHORT RUN",
+         BaselineType = "CRUDE OIL_REGIONS")
 
-g8.P_LR_dat_withY <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_withY[1,], middle = g8.est.world_P_LR_withY[2,], upper = g8.est.world_P_LR_withY[3,])
-g8.P_LR_dat_withY_crudep <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_withY_crudep[1,], middle = g8.est.world_P_LR_withY_crudep[2,], upper = g8.est.world_P_LR_withY_crudep[3,])
-g8.P_LR_dat_withY_crudepmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_withY_crudepmax[1,], middle = g8.est.world_P_LR_withY_crudepmax[2,], upper = g8.est.world_P_LR_withY_crudepmax[3,])
-g8.P_LR_dat_withY_prodpmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_withY_prodpmax[1,], middle = g8.est.world_P_LR_withY_prodpmax[2,], upper = g8.est.world_P_LR_withY_prodpmax[3,])
+g8.P_SR_dat_withY_crudep <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_withY_crudep[1,], middle = g8.est.world_P_SR_withY_crudep[2,], upper = g8.est.world_P_SR_withY_crudep[3,]) %>%
+  mutate(TypeLength = "SHORT RUN",
+         BaselineType = "CRUDE\nOIL")
 
-g8.P_SR_dat_withY$TypeLength <- "SHORT RUN"
-g8.P_SR_dat_withY_crudep$TypeLength <- "SHORT RUN"
-g8.P_SR_dat_withY_crudepmax$TypeLength <- "SHORT RUN"
-g8.P_SR_dat_withY_prodpmax$TypeLength <- "SHORT RUN"
+g8.P_SR_dat_withY_crudepmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_withY_crudepmax[1,], middle = g8.est.world_P_SR_withY_crudepmax[2,], upper = g8.est.world_P_SR_withY_crudepmax[3,]) %>%
+  mutate(TypeLength = "SHORT RUN",
+         BaselineType = "CRUDE\nOIL\nPMAX")
 
-g8.P_SR_dat_withY$BaselineType <- "CRUDE OIL_REGIONS"
-g8.P_SR_dat_withY_crudep$BaselineType <- "CRUDE\nOIL"
-g8.P_SR_dat_withY_crudepmax$BaselineType <- "CRUDE\nOIL\nPMAX"
-g8.P_SR_dat_withY_prodpmax$BaselineType <- "PETROLEUM\nPRODUCTS\nPMAX"
+g8.P_SR_dat_withY_prodpmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_SR_withY_prodpmax[1,], middle = g8.est.world_P_SR_withY_prodpmax[2,], upper = g8.est.world_P_SR_withY_prodpmax[3,]) %>%
+  mutate(TypeLength = "SHORT RUN",
+         BaselineType = "PETROLEUM\nPRODUCTS\nPMAX")
 
-g8.P_LR_dat_withY$TypeLength <- "LONG RUN"
-g8.P_LR_dat_withY_crudep$TypeLength <- "LONG RUN"
-g8.P_LR_dat_withY_crudepmax$TypeLength <- "LONG RUN"
-g8.P_LR_dat_withY_prodpmax$TypeLength <- "LONG RUN"
+g8.P_LR_dat_withY <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_withY[1,], middle = g8.est.world_P_LR_withY[2,], upper = g8.est.world_P_LR_withY[3,]) %>%
+  mutate(TypeLenTgh = "LONG RUN",
+         BaselineType = "CRUDE OIL_REGIONS")
 
-g8.P_LR_dat_withY$BaselineType <- "CRUDE OIL_REGIONS"
-g8.P_LR_dat_withY_crudep$BaselineType <- "CRUDE\nOIL"
-g8.P_LR_dat_withY_crudepmax$BaselineType <- "CRUDE\nOIL\nPMAX"
-g8.P_LR_dat_withY_prodpmax$BaselineType <- "PETROLEUM\nPRODUCTS\nPMAX"
+g8.P_LR_dat_withY_crudep <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_withY_crudep[1,], middle = g8.est.world_P_LR_withY_crudep[2,], upper = g8.est.world_P_LR_withY_crudep[3,]) %>%
+  mutate(TypeLength = "LONG RUN",
+         BaselineType = "CRUDE\nOIL")
+
+g8.P_LR_dat_withY_crudepmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_withY_crudepmax[1,], middle = g8.est.world_P_LR_withY_crudepmax[2,], upper = g8.est.world_P_LR_withY_crudepmax[3,]) %>%
+  mutate(TypeLength = "LONG RUN",
+         BaselineType = "CRUDE\nOIL\nPMAX")
+
+g8.P_LR_dat_withY_prodpmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_P_LR_withY_prodpmax[1,], middle = g8.est.world_P_LR_withY_prodpmax[2,], upper = g8.est.world_P_LR_withY_prodpmax[3,]) %>%
+  mutate(TypeLength = "LONG RUN",
+         BaselineType = "PETROLEUM\nPRODUCTS\nPMAX")
+
 
 #For final plot, I select only one year and leave out the baseline constructed out of regions
-g8.all.worldelast.p.withY <- rbind(g8.P_SR_dat_withY_crudep, g8.P_LR_dat_withY_crudep, g8.P_SR_dat_withY_crudepmax, g8.P_LR_dat_withY_crudepmax, g8.P_SR_dat_withY_prodpmax, g8.P_LR_dat_withY_prodpmax)
+g8.all.worldelast.p.withY <- rbind(g8.P_SR_dat_withY_crudep, g8.P_LR_dat_withY_crudep, g8.P_SR_dat_withY_crudepmax, g8.P_LR_dat_withY_crudepmax, g8.P_SR_dat_withY_prodpmax, g8.P_LR_dat_withY_prodpmax) %>%
+  mutate(middle = round(middle, 3)) %>%
+  filter(Year == "2017")
+
 g8.all.worldelast.p.withY$TypeLength <- factor(g8.all.worldelast.p.withY$TypeLength, levels = c("SHORT RUN", "LONG RUN"))
 g8.all.worldelast.p.withY$BaselineType <- factor(g8.all.worldelast.p.withY$BaselineType, levels = c("CRUDE\nOIL", "CRUDE\nOIL\nPMAX", "PETROLEUM\nPRODUCTS\nPMAX"))
-g8.all.worldelast.p.withY$middle <- round(g8.all.worldelast.p.withY$middle,3)
-g8.all.worldelast.p.withY.2017 <- subset(g8.all.worldelast.p.withY, Year == "2017")
 
-g8.world.elast.p.plot.withY <- ggplot(g8.all.worldelast.p.withY.2017, aes(x=BaselineType, y=middle)) + 
+
+g8.world.elast.p.plot.withY <- ggplot(g8.all.worldelast.p.withY, aes(x=BaselineType, y=middle)) + 
                   facet_wrap(~TypeLength) +
-                  geom_point(data=g8.all.worldelast.p.withY.2017, aes(x=BaselineType, y=middle), color = "black") +
+                  geom_point(data=g8.all.worldelast.p.withY, aes(x=BaselineType, y=middle), color = "black") +
                   geom_errorbar(aes(ymin=lower,ymax=upper))+
                   geom_text(aes(label = middle),hjust = 1, vjust = 0.5, size = 3.5, angle = 0, show.legend= FALSE) +
                   #geom_ribbon(data=g8.all.worldelast.p.withY, aes(ymin=lower, ymax=upper), alpha = 0.3) +
@@ -2117,8 +2146,7 @@ g8.world.elast.p.plot.withY <- ggplot(g8.all.worldelast.p.withY.2017, aes(x=Base
                   theme(axis.text.x=element_text(size=10), axis.text.y=element_text(size=10), axis.title=element_text(size=10, face="bold")) +
                   theme(plot.title=element_text(size=12, face="bold", hjust=0.5)) +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
-                  #ylim(-0.35, 0.05) +
-                  #scale_x_continuous(limits = c(2010, 2040), breaks = pretty_breaks(n = 8)) 
+                  
 g8.world.elast.p.plot.withY
 
 ```
@@ -2130,8 +2158,9 @@ The mean and 68% confidence interval for the world oil demand price elasticities
 #Produce another version of the plot based directly on the elasticity baselines and their standard errors (rather than the standard errors of the intercept term only)
 
 ##Focus on sectoral baselines only
-g8.out_summaryb <- subset(g8.out_summary, case2 == "P_1_1_0_1" | case2 == "P_1_1_1_0"| case2 == "Y_1_1_0_1" | case2 == "Y_1_1_1_0")
-g8.out_summaryb$caserun <- paste(g8.out_summaryb$case2,g8.out_summaryb$run, g8.out_summaryb$BaselineType, sep = "_" )
+g8.out_summaryb <- g8.out_summary1 %>%
+  filter(case2 %in% c("P_1_1_0_1", "P_1_1_1_0", "Y_1_1_0_1", "Y_1_1_1_0")) %>%
+  mutate(caserun = paste(case2, run, BaselineType, sep = "_" ))
 
 # Simulate confidence intervals for all the baseline world oil elasticities 
 g8.baseline = list()
@@ -2145,12 +2174,12 @@ g8.sterror[i] <- g8.out_summaryb$sterror.baseline[i]
 # Set seed and draw 20000 points out of each of the baseline elasticities
 set.seed(14)
 
-g8.elast.simb <- matrix(c(0), 20000, nrow(g8.out_summaryb))
+g8.elast.simb <- matrix(c(0), ndraws, nrow(g8.out_summaryb))
 colnames(g8.elast.simb) = g8.out_summaryb$caserun
 
 for(i in 1:length(g8.baseline)){
 #truncated normal distribution
-  g8.elast.simb[,i] <- rtruncnorm(20000, a = as.numeric(g8.baseline[i])- 1 * as.numeric(g8.sterror[i]), b = as.numeric(g8.baseline[i])+ 1* as.numeric(g8.sterror[i]), mean = as.numeric(g8.baseline[i]), sd = as.numeric(g8.sterror[i]))
+  g8.elast.simb[,i] <- rtruncnorm(ndraws, a = as.numeric(g8.baseline[i])- 1 * as.numeric(g8.sterror[i]), b = as.numeric(g8.baseline[i])+ 1* as.numeric(g8.sterror[i]), mean = as.numeric(g8.baseline[i]), sd = as.numeric(g8.sterror[i]))
 }
 
 # For each draw, compute weighted averages to obtain the predicted baseline world elasticities
@@ -2159,8 +2188,8 @@ for(i in 1:length(g8.baseline)){
 #################################
 
 ##based on sectoral baselines
-g8.world_PSR_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_PSR_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_PSR_crudep[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2172,8 +2201,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for crude price maximum
-g8.world_PSR_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_PSR_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_PSR_crudepmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2184,8 +2213,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for product price maximum
-g8.world_PSR_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_PSR_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_PSR_prodpmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2199,8 +2228,8 @@ for(i in 1:31){
 ################################
 
 ##based on sectoral baselines
-g8.world_PLR_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_PLR_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_PLR_crudep[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2211,8 +2240,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for crude price maximum
-g8.world_PLR_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_PLR_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_PLR_crudepmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2223,8 +2252,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for product price maximum
-g8.world_PLR_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_PLR_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_PLR_prodpmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2238,8 +2267,8 @@ for(i in 1:31){
 ##################################
 
 ##based on sectoral baselines
-g8.world_YSR_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_YSR_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_YSR_crudep[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2250,8 +2279,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for crude price maximum
-g8.world_YSR_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_YSR_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_YSR_crudepmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2262,8 +2291,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for product price maximum
-g8.world_YSR_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_YSR_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_YSR_prodpmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2277,8 +2306,8 @@ for(i in 1:31){
 ##################################
 
 ##based on sectoral baselines
-g8.world_YLR_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_YLR_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_YLR_crudep[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2289,8 +2318,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for crude price maximum
-g8.world_YLR_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_YLR_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_YLR_crudepmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2301,8 +2330,8 @@ for(i in 1:31){
 }
 
 ##based on sectoral baselines and for product price maximum
-g8.world_YLR_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){
+g8.world_YLR_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){
                g8.world_YLR_prodpmax[,i] = 
                (g8.worldelastw[g8.worldelastw$RegSect =="non_OECD_Non-transportation",c(i+2)] + 
                 g8.worldelastw[g8.worldelastw$RegSect =="OECD_Non-transportation",c(i+2)])*
@@ -2332,60 +2361,59 @@ for(i in 1:31){
  g8.est.world_YLR_prodpmax <- apply(g8.world_YLR_prodpmax, 2, quantile, probs = c(0, 0.5, 1))
  
 ##collect the results in a data frame for plotting in ggplot2
- g8.PSR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_crudep[1,], middle = g8.est.world_PSR_crudep[2,], upper = g8.est.world_PSR_crudep[3,])
- g8.PSR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_crudepmax[1,], middle = g8.est.world_PSR_crudepmax[2,], upper = g8.est.world_PSR_crudepmax[3,])
- g8.PSR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_prodpmax[1,], middle = g8.est.world_PSR_prodpmax[2,], upper = g8.est.world_PSR_prodpmax[3,])
+ g8.PSR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_crudep[1,], middle = g8.est.world_PSR_crudep[2,], upper = g8.est.world_PSR_crudep[3,]) %>%
+   mutate(TypeLength = "Short-Run Price",
+          BaselineType = "crudep")
  
- g8.PLR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_crudep[1,], middle = g8.est.world_PLR_crudep[2,], upper = g8.est.world_PLR_crudep[3,])
- g8.PLR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_crudepmax[1,], middle = g8.est.world_PLR_crudepmax[2,], upper = g8.est.world_PLR_crudepmax[3,])
- g8.PLR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_prodpmax[1,], middle = g8.est.world_PLR_prodpmax[2,], upper = g8.est.world_PLR_prodpmax[3,])
+ g8.PSR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_crudepmax[1,], middle = g8.est.world_PSR_crudepmax[2,], upper = g8.est.world_PSR_crudepmax[3,])%>%
+   mutate(TypeLength = "Short-Run Price",
+          BaselineType = "crudepmax")
  
- g8.YSR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YSR_crudep[1,], middle = g8.est.world_YSR_crudep[2,], upper = g8.est.world_YSR_crudep[3,])
- g8.YSR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YSR_crudepmax[1,], middle = g8.est.world_YSR_crudepmax[2,], upper = g8.est.world_YSR_crudepmax[3,])
- g8.YSR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YSR_prodpmax[1,], middle = g8.est.world_YSR_prodpmax[2,], upper = g8.est.world_YSR_prodpmax[3,])
+ g8.PSR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_prodpmax[1,], middle = g8.est.world_PSR_prodpmax[2,], upper = g8.est.world_PSR_prodpmax[3,]) %>%
+   mutate(TypeLength = "Short-Run Price",
+          BaselineType = "prodpmax")
  
- g8.YLR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YLR_crudep[1,], middle = g8.est.world_YLR_crudep[2,], upper = g8.est.world_YLR_crudep[3,])
- g8.YLR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YLR_crudepmax[1,], middle = g8.est.world_YLR_crudepmax[2,], upper = g8.est.world_YLR_crudepmax[3,])
- g8.YLR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YLR_prodpmax[1,], middle = g8.est.world_YLR_prodpmax[2,], upper = g8.est.world_YLR_prodpmax[3,])
+ g8.PLR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_crudep[1,], middle = g8.est.world_PLR_crudep[2,], upper = g8.est.world_PLR_crudep[3,]) %>%
+   mutate(TypeLength = "Long-Run Price",
+          BaselineType = "crudep")
  
+ g8.PLR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_crudepmax[1,], middle = g8.est.world_PLR_crudepmax[2,], upper = g8.est.world_PLR_crudepmax[3,]) %>%
+   mutate(TypeLength = "Long-Run Price",
+          BaselineType = "crudepmax")
  
-g8.PSR_crudep_dat$TypeLength <- "Short-Run Price"
-g8.PSR_crudepmax_dat$TypeLength <- "Short-Run Price"
-g8.PSR_prodpmax_dat$TypeLength <- "Short-Run Price"
+ g8.PLR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_prodpmax[1,], middle = g8.est.world_PLR_prodpmax[2,], upper = g8.est.world_PLR_prodpmax[3,])  %>%
+   mutate(TypeLength = "Long-Run Price",
+          BaselineType = "prodpmax")
+ 
+ g8.YSR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YSR_crudep[1,], middle = g8.est.world_YSR_crudep[2,], upper = g8.est.world_YSR_crudep[3,]) %>%
+   mutate(TypeLength = "Short-Run Income",
+          BaselineType = "crudep")
+ 
+ g8.YSR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YSR_crudepmax[1,], middle = g8.est.world_YSR_crudepmax[2,], upper = g8.est.world_YSR_crudepmax[3,]) %>%
+   mutate(TypeLength = "Short-Run Income",
+          BaselineType = "crudepmax")
+ 
+ g8.YSR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YSR_prodpmax[1,], middle = g8.est.world_YSR_prodpmax[2,], upper = g8.est.world_YSR_prodpmax[3,]) %>%
+   mutate(TypeLength = "Short-Run Income",
+          BaselineType = "prodpmax")
+ 
+ g8.YLR_crudep_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YLR_crudep[1,], middle = g8.est.world_YLR_crudep[2,], upper = g8.est.world_YLR_crudep[3,]) %>%
+   mutate(TypeLength = "Long-Run Income",
+          BaselineType = "crudep")
+ 
+ g8.YLR_crudepmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YLR_crudepmax[1,], middle = g8.est.world_YLR_crudepmax[2,], upper = g8.est.world_YLR_crudepmax[3,]) %>%
+   mutate(TypeLength = "Long-Run Income",
+          BaselineType = "crudepmax")
+ 
+ g8.YLR_prodpmax_dat <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_YLR_prodpmax[1,], middle = g8.est.world_YLR_prodpmax[2,], upper = g8.est.world_YLR_prodpmax[3,]) %>%
+   mutate(TypeLength = "Long-Run Income",
+          BaselineType = "crudepmax")
+ 
+g8.worldelast.p <- rbind(g8.PSR_crudep_dat, g8.PLR_crudep_dat, g8.PSR_crudepmax_dat, g8.PLR_crudepmax_dat, g8.PSR_prodpmax_dat, g8.PLR_prodpmax_dat) %>%
+  mutate_at(c('TypeLength', 'BaselineType'), as.factor)
 
-g8.PSR_crudep_dat$BaselineType <- "crudep"
-g8.PSR_crudepmax_dat$BaselineType <- "crudepmax"
-g8.PSR_prodpmax_dat$BaselineType <- "prodpmax"
-
-g8.PLR_crudep_dat$TypeLength <- "Long-Run Price"
-g8.PLR_crudepmax_dat$TypeLength <- "Long-Run Price"
-g8.PLR_prodpmax_dat$TypeLength <- "Long-Run Price"
-
-g8.PLR_crudep_dat$BaselineType <- "crudep"
-g8.PLR_crudepmax_dat$BaselineType <- "crudepmax"
-g8.PLR_prodpmax_dat$BaselineType <- "prodpmax"
-
-g8.YSR_crudep_dat$TypeLength <- "Short-Run Income"
-g8.YSR_crudepmax_dat$TypeLength <- "Short-Run Income"
-g8.YSR_prodpmax_dat$TypeLength <- "Short-Run Income"
-
-g8.YSR_crudep_dat$BaselineType <- "crudep"
-g8.YSR_crudepmax_dat$BaselineType <- "crudepmax"
-g8.YSR_prodpmax_dat$BaselineType <- "prodpmax"
-
-g8.YLR_crudep_dat$TypeLength <- "Long-Run Income"
-g8.YLR_crudepmax_dat$TypeLength <- "Long-Run Income"
-g8.YLR_prodpmax_dat$TypeLength <- "Long-Run Income"
-
-g8.YLR_crudep_dat$BaselineType <- "crudep"
-g8.YLR_crudepmax_dat$BaselineType <- "crudepmax"
-g8.YLR_prodpmax_dat$BaselineType <- "prodpmax"
-
-
-g8.worldelast.p <- rbind(g8.PSR_crudep_dat, g8.PLR_crudep_dat, g8.PSR_crudepmax_dat, g8.PLR_crudepmax_dat, g8.PSR_prodpmax_dat, g8.PLR_prodpmax_dat)
-g8.worldelast.p$TypeLength <- as.factor(g8.worldelast.p$TypeLength)
 g8.worldelast.p$TypeLength <- factor(g8.worldelast.p$TypeLength, levels = c("Short-Run Price", "Long-Run Price"))
-g8.worldelast.p$BaselineType <- as.factor(g8.worldelast.p$BaselineType)
+
  
 g8.world.elastp.plot <- ggplot(g8.worldelast.p, aes(x=Year, y=middle, color = BaselineType)) + facet_wrap(~TypeLength) +
                   geom_line(data=g8.worldelast.p, color = "black")+
@@ -2399,10 +2427,11 @@ g8.world.elastp.plot <- ggplot(g8.worldelast.p, aes(x=Year, y=middle, color = Ba
                   scale_x_continuous(limits = c(2010, 2040), breaks = pretty_breaks(n = 6)) 
 g8.world.elastp.plot
 
-g8.worldelast.y <- rbind(g8.YSR_crudep_dat, g8.YLR_crudep_dat, g8.YSR_crudepmax_dat, g8.YLR_crudepmax_dat, g8.YSR_prodpmax_dat, g8.YLR_prodpmax_dat)
-g8.worldelast.y$TypeLength <- as.factor(g8.worldelast.y$TypeLength)
+g8.worldelast.y <- rbind(g8.YSR_crudep_dat, g8.YLR_crudep_dat, g8.YSR_crudepmax_dat, g8.YLR_crudepmax_dat, g8.YSR_prodpmax_dat, g8.YLR_prodpmax_dat) %>%
+  mutate_at(c('TypeLength', 'BaselineType'), as.factor)
+
 g8.worldelast.y$TypeLength <- factor(g8.worldelast.y$TypeLength, levels = c("Short-Run Income", "Long-Run Income"))
-g8.worldelast.y$BaselineType <- as.factor(g8.worldelast.y$BaselineType)
+
  
 g8.world.elasty.plot <- ggplot(g8.worldelast.y, aes(x=Year, y=middle, color = BaselineType)) + facet_wrap(~TypeLength) +
                   geom_line(data=g8.worldelast.y, color = "black")+
@@ -2424,24 +2453,24 @@ g8.worldelast.plot <- grid.arrange(g8.world.elastp.plot, g8.world.elasty.plot, n
 GDPoilelast <- -0.02
 
 ##SHORT_RUN
-g8.world_PSR_withY_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_PSR_withY_crudep[,i] = g8.world_PSR_crudep[,i] + GDPoilelast * g8.world_YSR_crudep[,i]}
+g8.world_PSR_withY_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_PSR_withY_crudep[,i] = g8.world_PSR_crudep[,i] + GDPoilelast * g8.world_YSR_crudep[,i]}
 
-g8.world_PSR_withY_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_PSR_withY_crudepmax[,i] = g8.world_PSR_crudepmax[,i] + GDPoilelast * g8.world_YSR_crudepmax[,i]}
+g8.world_PSR_withY_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_PSR_withY_crudepmax[,i] = g8.world_PSR_crudepmax[,i] + GDPoilelast * g8.world_YSR_crudepmax[,i]}
 
-g8.world_PSR_withY_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_PSR_withY_prodpmax[,i] = g8.world_PSR_prodpmax[,i] + GDPoilelast * g8.world_YSR_prodpmax[,i]}
+g8.world_PSR_withY_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_PSR_withY_prodpmax[,i] = g8.world_PSR_prodpmax[,i] + GDPoilelast * g8.world_YSR_prodpmax[,i]}
 
 ##LONG_RUN
-g8.world_PLR_withY_crudep <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_PLR_withY_crudep[,i] = g8.world_PLR_crudep[,i] + GDPoilelast * g8.world_YLR_crudep[,i]}
+g8.world_PLR_withY_crudep <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_PLR_withY_crudep[,i] = g8.world_PLR_crudep[,i] + GDPoilelast * g8.world_YLR_crudep[,i]}
 
-g8.world_PLR_withY_crudepmax <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_PLR_withY_crudepmax[,i] = g8.world_PLR_crudepmax[,i] + GDPoilelast * g8.world_YLR_crudepmax[,i]}
+g8.world_PLR_withY_crudepmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_PLR_withY_crudepmax[,i] = g8.world_PLR_crudepmax[,i] + GDPoilelast * g8.world_YLR_crudepmax[,i]}
 
-g8.world_PLR_withY_prodpmax <- matrix(c(0),20000,31)
-for(i in 1:31){g8.world_PLR_withY_prodpmax[,i] = g8.world_PLR_prodpmax[,i] + GDPoilelast * g8.world_YLR_prodpmax[,i]}
+g8.world_PLR_withY_prodpmax <- matrix(c(0),ndraws,nyears)
+for(i in 1:nyears){g8.world_PLR_withY_prodpmax[,i] = g8.world_PLR_prodpmax[,i] + GDPoilelast * g8.world_YLR_prodpmax[,i]}
 
 
 
@@ -2457,50 +2486,51 @@ g8.est.world_PLR_withY_prodpmax <- apply(g8.world_PLR_withY_prodpmax, 2, quantil
 
 # Collect the results in a data frame for plotting in ggplot2
 
-g8.PSR_dat_withY_crudep <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_withY_crudep[1,], middle = g8.est.world_PSR_withY_crudep[2,], upper = g8.est.world_PSR_withY_crudep[3,])
-g8.PSR_dat_withY_crudepmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_withY_crudepmax[1,], middle = g8.est.world_PSR_withY_crudepmax[2,], upper = g8.est.world_PSR_withY_crudepmax[3,])
-g8.PSR_dat_withY_prodpmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_withY_prodpmax[1,], middle = g8.est.world_PSR_withY_prodpmax[2,], upper = g8.est.world_PSR_withY_prodpmax[3,])
+g8.PSR_dat_withY_crudep <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_withY_crudep[1,], middle = g8.est.world_PSR_withY_crudep[2,], upper = g8.est.world_PSR_withY_crudep[3,]) %>%
+  mutate(TypeLength = "SHORT RUN",
+         BaselineType = "CRUDE\nOIL")
 
-g8.PLR_dat_withY_crudep <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_withY_crudep[1,], middle = g8.est.world_PLR_withY_crudep[2,], upper = g8.est.world_PLR_withY_crudep[3,])
-g8.PLR_dat_withY_crudepmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_withY_crudepmax[1,], middle = g8.est.world_PLR_withY_crudepmax[2,], upper = g8.est.world_PLR_withY_crudepmax[3,])
-g8.PLR_dat_withY_prodpmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_withY_prodpmax[1,], middle = g8.est.world_PLR_withY_prodpmax[2,], upper = g8.est.world_PLR_withY_prodpmax[3,])
+g8.PSR_dat_withY_crudepmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_withY_crudepmax[1,], middle = g8.est.world_PSR_withY_crudepmax[2,], upper = g8.est.world_PSR_withY_crudepmax[3,])%>%
+  mutate(TypeLength = "SHORT RUN",
+         BaselineType = "CRUDE\nOIL\nPMAX")
 
-g8.PSR_dat_withY_crudep$TypeLength <- "SHORT RUN"
-g8.PSR_dat_withY_crudepmax$TypeLength <- "SHORT RUN"
-g8.PSR_dat_withY_prodpmax$TypeLength <- "SHORT RUN"
+g8.PSR_dat_withY_prodpmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PSR_withY_prodpmax[1,], middle = g8.est.world_PSR_withY_prodpmax[2,], upper = g8.est.world_PSR_withY_prodpmax[3,]) %>%
+  mutate(TypeLength = "SHORT RUN",
+         BaselineType = "PETROLEUM\nPRODUCTS\nPMAX")
 
-g8.PSR_dat_withY_crudep$BaselineType <- "CRUDE\nOIL"
-g8.PSR_dat_withY_crudepmax$BaselineType <- "CRUDE\nOIL\nPMAX"
-g8.PSR_dat_withY_prodpmax$BaselineType <- "PETROLEUM\nPRODUCTS\nPMAX"
+g8.PLR_dat_withY_crudep <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_withY_crudep[1,], middle = g8.est.world_PLR_withY_crudep[2,], upper = g8.est.world_PLR_withY_crudep[3,]) %>%
+  mutate(TypeLength = "LONG RUN",
+         BaselineType = "CRUDE\nOIL")
 
-g8.PLR_dat_withY_crudep$TypeLength <- "LONG RUN"
-g8.PLR_dat_withY_crudepmax$TypeLength <- "LONG RUN"
-g8.PLR_dat_withY_prodpmax$TypeLength <- "LONG RUN"
+g8.PLR_dat_withY_crudepmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_withY_crudepmax[1,], middle = g8.est.world_PLR_withY_crudepmax[2,], upper = g8.est.world_PLR_withY_crudepmax[3,]) %>%
+  mutate(TypeLength = "LONG RUN",
+         BaselineType = "CRUDE\nOIL\nPMAX")
 
-g8.PLR_dat_withY_crudep$BaselineType <- "CRUDE\nOIL"
-g8.PLR_dat_withY_crudepmax$BaselineType <- "CRUDE\nOIL\nPMAX"
-g8.PLR_dat_withY_prodpmax$BaselineType <- "PETROLEUM\nPRODUCTS\nPMAX"
+g8.PLR_dat_withY_prodpmax <- data.frame(Year = seq(2010,2040,1), lower = g8.est.world_PLR_withY_prodpmax[1,], middle = g8.est.world_PLR_withY_prodpmax[2,], upper = g8.est.world_PLR_withY_prodpmax[3,]) %>%
+  mutate(TypeLength = "LONG RUN",
+         BaselineType = "PETROLEUM\nPRODUCTS\nPMAX")
 
 #For final plot, I select only one year and leave out the baseline constructed out of regions# For each draw, compute weighted averages to obtain the predicted baseline world elasticities
 g8.worldelast.p.withY <- rbind(g8.PSR_dat_withY_crudep, g8.PSR_dat_withY_crudepmax, g8.PSR_dat_withY_prodpmax,
                                g8.PLR_dat_withY_crudep, g8.PLR_dat_withY_crudepmax, g8.PLR_dat_withY_prodpmax)
+
 g8.worldelast.p.withY$TypeLength <- factor(g8.worldelast.p.withY$TypeLength, levels = c("SHORT RUN", "LONG RUN"))
 
 TypeLength <- c("SHORT RUN", "LONG RUN")
 TypeLength2 <- c("SHORT RUN (~1 YEAR)", "LONG RUN (~10 YEARS)")
 TypeLengthmatch <- data.frame(TypeLength, TypeLength2)
 
-g8.worldelast.p.withY <- merge(g8.worldelast.p.withY, TypeLengthmatch, by = "TypeLength")
+g8.worldelast.p.withY <- left_join(g8.worldelast.p.withY, TypeLengthmatch, by = "TypeLength") %>%
+  mutate(middle = round(middle, 3)) %>%
+  filter(Year == "2017")
 
 g8.worldelast.p.withY$BaselineType <- factor(g8.worldelast.p.withY$BaselineType, levels = c("CRUDE\nOIL", "CRUDE\nOIL\nPMAX", "PETROLEUM\nPRODUCTS\nPMAX"))
 g8.worldelast.p.withY$TypeLength2 <- factor(g8.worldelast.p.withY$TypeLength2, levels = c("SHORT RUN (~1 YEAR)", "LONG RUN (~10 YEARS)"))
   
-g8.worldelast.p.withY$middle <- round(g8.worldelast.p.withY$middle,3)
-g8.worldelast.p.withY.2017 <- subset(g8.worldelast.p.withY, Year == "2017")
 
-g8.world.elastp.plot.withY <- ggplot(g8.worldelast.p.withY.2017, aes(x=BaselineType, y=middle)) + 
+g8.world.elastp.plot.withY <- ggplot(g8.worldelast.p.withY, aes(x=BaselineType, y=middle)) + 
                   facet_wrap(~TypeLength2) +
-                  geom_point(data=g8.worldelast.p.withY.2017, aes(x=BaselineType, y=middle), color = "black") +
+                  geom_point(data=g8.worldelast.p.withY, aes(x=BaselineType, y=middle), color = "black") +
                   geom_errorbar(aes(ymin=lower,ymax=upper), width = 0.3)+
                   geom_text(aes(label = middle),hjust = -0.2, vjust = 0.5, size = 3.2, angle = 0, show.legend= FALSE) +
                   #geom_ribbon(data=g8.all.worldelast.p.withY, aes(ymin=lower, ymax=upper), alpha = 0.3) +
@@ -2509,8 +2539,6 @@ g8.world.elastp.plot.withY <- ggplot(g8.worldelast.p.withY.2017, aes(x=BaselineT
                   theme(axis.text.x=element_text(size=10), axis.text.y=element_text(size=10), axis.title=element_text(size=10, face="bold")) +
                   theme(plot.title=element_text(size=12, face="bold", hjust=0.5)) +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "grey"), panel.border = element_rect(colour = "grey", fill=NA, size=1))  
-                  #ylim(-0.35, 0.05) +
-                  #scale_x_continuous(limits = c(2010, 2040), breaks = pretty_breaks(n = 8)) 
 g8.world.elastp.plot.withY
 ggsave("../Output/g8.world.elastp.plot.withY.png", width=6.5, height=4.5, units="in", dpi=600)
 
@@ -2526,31 +2554,30 @@ g8.world.elastp.plot.withY
 **Figure 4. Estimated short-run and long-run world oil demand elasticities with respect to price (including income effect)**
 
 
-
-
 ```{r WorldElast.compare, eval = TRUE, include=FALSE, echo=FALSE}
 #Select papers that provide world elasticity of oil demand
+##Note: Burke & Nishitateno is removed because it computes world elasticities only for the transportation sector.
 world.elasts <- filter(allelast.excluded, REG =="World" & REFERENCE != "BurkeNishitateno2013") %>%
-  select(one_of(c("REFERENCE", "BETA", "ST_ERROR", "TYPE", "TYPE_LENGTH2", "AVGYR", "NOTES1")))
-##Note: I remove Burke & Nishitateno because it computes world elasticities only for the transportation sector.
-
-#Add column to distinguish which elasticities are elasticities in production (as defined by Killian and Murphy)
-world.elasts$elast.in.prod <- ifelse (world.elasts$NOTES1 == "elasticity in use", "elasticity in use", "elasticity in production")
-world.elasts <- select(world.elasts, one_of(c("REFERENCE", "BETA", "ST_ERROR", "TYPE", "TYPE_LENGTH2", "AVGYR", "elast.in.prod")))
+  select(REFERENCE, BETA, ST_ERROR, TYPE, TYPE_LENGTH2, AVGYR, NOTES1) %>%
+  #Add column to distinguish which elasticities are elasticities in production (as defined by Killian and Murphy)
+  mutate(elast.in.prod = ifelse(NOTES1 == "elasticity in use", "elasticity in use", "elasticity in production")) %>%
+  select(-NOTES1)
 
 #For the purposes of this qualitative comparison, recover observations that were dropped because they were long-run elasticities for which the length of run could not be determined.
-world.elasts.NAspeed <- filter(allelast.NAspeed, REGION =="World") %>%
-  select(one_of(c("REFERENCE", "BETA", "ST_ERROR", "VAR_SYMBOL", "YEAR_START", "YEAR_END")))
-world.elasts.NAspeed$TYPE <- as.factor(substr(world.elasts.NAspeed$VAR_SYMBOL, 1,1))
-world.elasts.NAspeed$LENGTH <- as.factor(ifelse(world.elasts.NAspeed$VAR_SYMBOL == "P"|world.elasts.NAspeed$VAR_SYMBOL == "Y", "LR", "SR"))
-world.elasts.NAspeed$TYPE_LENGTH2 <- as.factor(paste0(world.elasts.NAspeed$TYPE, "_", world.elasts.NAspeed$LENGTH))
-world.elasts.NAspeed$AVGYR <- as.numeric((world.elasts.NAspeed$YEAR_END + world.elasts.NAspeed$YEAR_START)/2)
-world.elasts.NAspeed$elast.in.prod <- "elasticity in production"
-world.elasts.NAspeed<- world.elasts.NAspeed[,c("REFERENCE", "BETA", "ST_ERROR", "TYPE", "TYPE_LENGTH2", "AVGYR", "elast.in.prod")]
+world.elasts.NAspeed <- allelast.NAspeed %>%
+  filter(REGION =="World") %>%
+  select(REFERENCE, BETA, ST_ERROR, VAR_SYMBOL, YEAR_START, YEAR_END) %>%
+  mutate(TYPE = as.factor(substr(VAR_SYMBOL, 1,1)),
+         LENGTH = as.factor(ifelse(VAR_SYMBOL %in% c("P", "Y"), "LR", "SR")),
+         TYPE_LENGTH2 = as.factor(paste(TYPE, LENGTH, sep = "_")),
+         AVGYR = (YEAR_END + YEAR_START)/2,
+         elast.in.prod = "elasticity in production") %>%
+  ungroup() %>%
+  select(REFERENCE, BETA, ST_ERROR, TYPE, TYPE_LENGTH2, AVGYR, elast.in.prod)
 
 world.elasts.all <- rbind(world.elasts, world.elasts.NAspeed)
 
-g8.worldelast.p.withY
+
 #Add rows to include the elasticitiy values (mean and standard error) from the ORNL meta-analysis 
 #Note: These are all elasticities with respect to crude oil price so I will not include the baseline depicting elasticity with respect to product prices
 ornl.elasts <- as.data.frame(matrix(0, ncol = 7, nrow = 2))
@@ -2570,15 +2597,13 @@ ornl.elasts$TYPE <- as.factor(ornl.elasts$TYPE)
 ornl.elasts$TYPE_LENGTH2 <- as.factor(ornl.elasts$TYPE_LENGTH2)
 
 ornl.elasts$AVGYR <- mean(allelast$AVGYR[allelast$ELASTICITY == "1" & allelast$TYPE_LENGTH2 == "P_SR"]) 
-#ornl.elasts$AVGYR[2] <- mean(allelast$AVGYR[allelast$ELASTICITY == "1" & allelast$TYPE_LENGTH2 == "P_SR"]) 
 
 ornl.elasts$elast.in.prod <- c("elasticity in use","elasticity in use")
 
-world.elasts.with.ORNLmetareg <- rbind(world.elasts.all, ornl.elasts)
-world.elasts.with.ORNLmetareg$elast.in.prod <- as.factor(world.elasts.with.ORNLmetareg$elast.in.prod)
-#world.elasts.with.ORNLmetareg$elast.in.prod[world.elasts.with.ORNLmetareg$REFERENCE == "IMF2011"] <- ""
+world.elasts.with.ORNLmetareg <- rbind(world.elasts.all, ornl.elasts) %>%
+  mutate(elast.in.prod = as.factor(elast.in.prod),
+         TYPE_LENGTH3 = ifelse(TYPE_LENGTH2 == "P_SR", "Short-Run", "Long-Run")) 
 
-world.elasts.with.ORNLmetareg$TYPE_LENGTH3 <- ifelse(world.elasts.with.ORNLmetareg$TYPE_LENGTH2 == "P_SR", "Short-Run", "Long-Run")
 world.elasts.with.ORNLmetareg$TYPE_LENGTH3 <- factor(world.elasts.with.ORNLmetareg$TYPE_LENGTH3, levels = c("Short-Run", "Long-Run"))
 
 world.elast.compare.plot <- ggplot(world.elasts.with.ORNLmetareg[world.elasts.with.ORNLmetareg$TYPE_LENGTH2 == "P_SR",], aes(x=AVGYR, y=BETA, shape = elast.in.prod)) + 
