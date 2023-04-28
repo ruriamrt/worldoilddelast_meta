@@ -21,7 +21,8 @@ Package versions:
 - grid 4.2.2
 - gridExtra 2.3
 - stargazer 5.2.3
-- knitr 1.41
+- knitr 1.41  
+- tinytex 0.44
 - broom 1.0.2
 - broom.mixed 0.2.9.4
 - car 3.1.1
@@ -51,5 +52,4 @@ Steps for replication of the manuscript
 ===========================================
 Step 1: (if needed) Installing R, R Studio and any necessary R packages  
 Step 2: Run oildd_elast_metaanalysis_DataPrep_20170818.Rmd (it will produce two output files that becomes the input files for the Stage1 .Rmd file)  
-Step 3: Run oildd_elast_metaanalysis_Stage1_20181120_Manuscript.Rmd  
-Step 4: Knit oildd_elast_metaanalysis_Stage1_20181120_Manuscript.Rmd to generate the manuscript ("oildd_elast_metaanalysis_Stage1_20181120_Manuscript.pdf")  
+Step 3: Knit oildd_elast_metaanalysis_Stage1_20181120_Manuscript.Rmd to generate the manuscript ("oildd_elast_metaanalysis_Stage1_20181120_Manuscript.pdf")  

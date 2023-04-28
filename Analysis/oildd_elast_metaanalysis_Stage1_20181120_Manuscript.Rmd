@@ -1,12 +1,18 @@
 ---
-title: Using Meta-Analysis to Estimate World Oil Demand Elasticity
-author:
-  - Roc&#237;o Ur&#237;a-Mart&#237;nez, Oak Ridge National Laboratory  
-  - Paul N. Leiby, Oak Ridge National Laboratory  
-  - Gbadebo Oladosu, Oak Ridge National Laboratory  
-  - David C. Bowman, Econotech  
-  - Megan M. Johnson, Oak Ridge National Laboratory  
+title: Using Meta-Analysis to Estimate World Oil Demand Elasticity  
 
+author:  
+
+  - Roc&#237;o Ur&#237;a-Mart&#237;nez, Oak Ridge National Laboratory   
+  
+  - Paul N. Leiby, Oak Ridge National Laboratory   
+  
+  - Gbadebo Oladosu, Oak Ridge National Laboratory  
+  
+  - David C. Bowman, Econotech   
+  
+  - Megan M. Johnson, Oak Ridge National Laboratory   
+  
 
 abstract: Crude oil demand elasticities are important behavioral parameters for assessing the effectiveness of many energy policy proposals and the economic impact of crude oil market shocks. Most of the literature on crude oil demand computes elasticities for one specific petroleum product in a country or group of countries. There are fewer published values for world crude oil demand elasticity because it requires more complex estimation methods. Since world crude oil demand and price are simultaneously determined, the reduced-form single equation approach used in much of the petroleum product demand literature leads to endogeneity bias when applied to global demand. This study uses meta-analysis techniques to compute world crude oil demand elasticity. Metaregressions are first conducted to identify sources of variation in elasticity estimates for transportation and non-transportation sectors collected from 75 studies published from 2000 to 2015 using a consistent set of explanatory variables identified in the literature. The estimated coefficients from the metaregressions are then summarized into elasticity baseline values for several combinations of explanatory variable values. Finally, a global crude oil demand elasticity is computed as the consumption-weighted average of the two sectoral elasticities. Resulting mean values for the short-run crude oil demand elasticities with respect to price range from -0.07 to -0.14 depending on the attributes selected for the price variable. As expected from theory and empirical studies, crude oil demand is more price-responsive in the long run than in the short run. Long-run mean values range from -0.26 to -0.83.
 
@@ -30,6 +36,7 @@ library(grid)
 library(gridExtra)
 library(stargazer) # to produce nice tables for the results
 library(knitr)
+library(tinytex)
 library(styler)
 
 library(car) # for computing variance inflation factors to evaluate the extent to which multicollinearity is an issue
