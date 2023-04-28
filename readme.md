@@ -47,7 +47,7 @@ Analysis:
 
 Steps for replication of the manuscript  
 ===========================================
-Step 1: (if needed) Installing R, R Studio and any necessary R packages
-Step 2: Run oildd_elast_metaanalysis_DataPrep_20170818.Rmd (it will produce two output files that becomes the input files for the Stage1 .Rmd file)
-Step 3: Run oildd_elast_metaanalysis_Stage1_20181120_Manuscript.Rmd 
-Step 4: Knit oildd_elast_metaanalysis_Stage1_20181120_Manuscript.Rmd to generate the manuscript ("oildd_elast_metaanalysis_Stage1_20181120_Manuscript.pdf")
+Step 1: (if needed) Installing R, R Studio and any necessary R packages  
+Step 2: Run oildd_elast_metaanalysis_DataPrep_20170818.Rmd (it will produce two output files that becomes the input files for the Stage1 .Rmd file)  
+Step 3: Run oildd_elast_metaanalysis_Stage1_20181120_Manuscript.Rmd  
+Step 4: Knit oildd_elast_metaanalysis_Stage1_20181120_Manuscript.Rmd to generate the manuscript ("oildd_elast_metaanalysis_Stage1_20181120_Manuscript.pdf")  
