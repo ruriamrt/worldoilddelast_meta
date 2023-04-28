@@ -35,13 +35,14 @@ Package versions:
 
 Necessary files
 ================
-Data:
--oilddelasticity_db.xlsx: contains elasticity database to be used in the meta-analysis
--auxiliary_inputs_20170829.xlsx: contains data needed to construct some of the moderator variables to be used in the metaregressions
+Data:  
 
-Analysis:
--oildd_elast_metaanalysis_DataPrep_20170818.Rmd: reads and processes data and performs initial exploratory analysis 
--oildd_elast_metaanalysis_Stage1_20181120_Manuscript.Rmd: performs metaregression analysis and generates manuscript
+- oilddelasticity_db.xlsx: contains elasticity database to be used in the meta-analysis  
+- auxiliary_inputs_20170829.xlsx: contains data needed to construct some of the moderator variables to be used in the metaregressions  
+
+Analysis:  
+- oildd_elast_metaanalysis_DataPrep_20170818.Rmd: reads and processes data and performs initial exploratory analysis  
+- oildd_elast_metaanalysis_Stage1_20181120_Manuscript.Rmd: performs metaregression analysis and generates manuscript  
 
 
 
