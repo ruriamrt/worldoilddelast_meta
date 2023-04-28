@@ -3,6 +3,10 @@
 .RData
 .Ruserdata
 Output/
+Data/allelast_v1
+Data/allelast_v1_NAspeed
 oildd_elast_metaanalysis_Stage1_20181120_Manuscript_files/
+*.Rproj
 *.tex
 *.spl
+*.docx
