@@ -1058,7 +1058,7 @@ allelast.Pmax.summary.Pmax <- allelast.Pmax.summary %>% filter(Pmax == "Pmax")
 allelast.Pmax.summary.Psubmax <- allelast.Pmax.summary %>% filter(Pmax == "Psubmax")
 
 allelast.Pmax.summary.w <- allelast.Pmax.summary.Pmax %>%
-  right_join(allelast.Pmax.summary.Psubmax, by = c("REFERENCE", "LENGTH", "PRODUCT_SECTOR", "REGION", "label"), all.y = TRUE) %>%
+  right_join(allelast.Pmax.summary.Psubmax, by = c("REFERENCE", "LENGTH", "PRODUCT_SECTOR", "REGION", "label")) %>%
   filter(!is.na(average.x) & !is.na(average.y)) %>%
   mutate(
     abs.diff = average.x - average.y,
